@@ -5,15 +5,13 @@ export default async function handler(req, res) {
     try {
       const userMessage = req.body.message;
 
-      // Llamada al modelo Starcoder de Hugging Face
-      const response = await fetch("https://api-inference.huggingface.co/models/bigcode/starcoder", {
+      // Llamada a Puter.js (IA gratuita)
+      const response = await fetch("https://js.puter.com/v2/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`, // Si decides usar un token
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          inputs: userMessage,
+          model: "gpt-4.1-nano",
+          messages: [{ role: "user", content: userMessage }],
         }),
       });
 
