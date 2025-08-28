@@ -17,10 +17,10 @@ export default async function handler(req, res) {
         }
       );
 
-      const data = await response.json();
-      const outputText = data[0]?.generated_text || "No se recibió respuesta";
-
-      res.status(200).json({ response: outputText });
+      // Temporal: obtener texto crudo
+const text = await response.text();
+console.log(text); // <- Esto te permite ver qué devuelve la API
+res.status(200).send(text);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
