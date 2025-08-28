@@ -5,11 +5,19 @@ export default async function handler(req, res) {
     try {
       const userMessage = req.body.message;
 
-      // Llamada a la nueva API GPT
-      const response = await fetch(`https://free-unoficial-gpt4o-mini-api-g70n.onrender.com/?message=${encodeURIComponent(userMessage)}`);
-      const data = await response.json();
+      // Llamada al modelo Starcoder de Hugging Face
+      const response = await fetch("https://api-inference.huggingface.co/models/bigcode/starcoder", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`, // Si decides usar un token
+        },
+        body: JSON.stringify({
+          inputs: userMessage,
+        }),
+      });
 
-      // Enviar la respuesta al cliente
+      const data = await response.json();
       res.status(200).json(data);
     } catch (error) {
       res.status(500).json({ error: error.message });
