@@ -1,54 +1,138 @@
-function escapeHTML(s = "") {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+Fondo negro.
 
 module.exports = async function handler(req, res) {
-  try {
-    // Obtener el texto desde la query (?text=...) con fallback a (?q=...)
-    const url = new URL(req.url, "http://localhost");
-    const textQ = req.query?.text ?? req.query?.q ?? url.searchParams.get("text") ?? url.searchParams.get("q") ?? "";
-    const text = escapeHTML(String(textQ));
-    const gifPath = "/assistant.gif"; // tu GIF en la raíz del proyecto
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
 
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-
-    const html = `<!doctype html>
-<html>
+  // La página leerá ?text=... (o ?q=...) en el cliente para evitar inyección.
+  // También puedes pasar ?speed=18 (ms) y ?chunk=2 (caracteres por tick).
+  const html = `<!doctype html>
+<html lang="es">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="color-scheme" content="dark light">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>Asistente</title>
 <style>
-  :root{ color-scheme: dark; }
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
   body{
-    margin:0; background:#0b0b0d; color:#fff;
-    font-family:-apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-height:100vh; padding:24px; gap:18px;
+    margin:0; background:#0b0b0d; color:#e8e8ea;
+    font-family:-apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    padding:24px;
   }
-  img{ width:120px; height:120px; border-radius:24px; object-fit:cover; }
+
+  .wrap{
+    width:min(900px, 96vw);
+    display:grid;
+    grid-template-columns: 140px 1fr;
+    gap:22px;
+    align-items:center;
+  }
+
+  /* ORBE estilo Siri, con capas y brillo */
+  .orb{
+    position:relative; width:140px; height:140px; border-radius:50%;
+    background:
+      radial-gradient(60% 60% at 50% 50%, rgba(125,0,255,.65) 0%, transparent 60%),
+      radial-gradient(60% 60% at 70% 30%, rgba(0,200,255,.65) 0%, transparent 60%),
+      radial-gradient(60% 60% at 30% 70%, rgba(255,40,140,.55) 0%, transparent 60%);
+    box-shadow:
+      0 0 40px rgba(125,0,255,.35),
+      0 0 60px rgba(0,200,255,.25),
+      inset 0 0 26px rgba(255,255,255,.08);
+    animation: float 3.2s ease-in-out infinite;
+    overflow:visible;
+  }
+  .orb::before,.orb::after{
+    content:""; position:absolute; inset:-18%; border-radius:inherit;
+    background: conic-gradient(from 0deg, #8a2be2, #00e0ff, #ff2bb6, #8a2be2);
+    filter: blur(34px); opacity:.55; animation: spin 14s linear infinite;
+  }
+  .orb::after{
+    inset:-34%; filter: blur(60px); opacity:.32; animation-duration:28s;
+  }
+  @keyframes spin { to { transform: rotate(360deg);} }
+  @keyframes float { 0%,100% { transform:translateY(-3px);} 50%{ transform:translateY(3px);} }
+
+  /* Burbuja de texto */
   .bubble{
-    max-width:760px; width:calc(100% - 32px);
-    background:#141418; border:1px solid #222; border-radius:16px;
-    padding:16px 18px; box-shadow:0 6px 20px rgba(0,0,0,.25);
-    font-size:18px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word;
+    background: #121217;
+    border: 1px solid #23232a;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+    min-height: 84px;
+  }
+  .title{
+    font-weight:600; color:#bdbdc7; letter-spacing:.2px; margin-bottom:8px; font-size:13px;
+    text-transform: uppercase;
+  }
+  .out{
+    font-size:18px; line-height:1.5; white-space:pre-wrap; word-break:break-word;
+    font-variant-ligatures: none;
+  }
+
+  /* Efecto máquina de escribir: cursor parpadeante */
+  .out::after{
+    content:"▎"; display:inline-block; margin-left:2px; color:#79c0ff;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Respeta accesibilidad: reduce animación si el usuario lo pide */
+  @media (prefers-reduced-motion: reduce){
+    .orb, .orb::before, .orb::after { animation:none }
+    .out::after { animation:none }
   }
 </style>
 </head>
 <body>
-  <img src="${gifPath}" alt="Assistant">
-  <div class="bubble">${text || "..."}</div>
+  <div class="wrap">
+    <div class="orb" aria-hidden="true"></div>
+    <div class="bubble">
+      <div class="title">Asistente</div>
+      <div id="out" class="out" aria-live="polite"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const qs = new URLSearchParams(location.search);
+  // El texto llega en ?text=..., alternativa ?q=...
+  const raw = qs.get("text") || qs.get("q") || "";
+  // Atajos suele URL-encodear bien; por si acaso:
+  const source = decodeURIComponent(raw);
+
+  // Ajustes (opcionales por query): ?speed=18&chunk=2
+  const speed = Math.max(1, parseInt(qs.get("speed") || "18", 10));  // ms por tick
+  const chunk = Math.max(1, parseInt(qs.get("chunk") || "2", 10));   // nº de caracteres por tick
+
+  const out = document.getElementById("out");
+  out.textContent = ""; // limpio
+
+  // Typewriter incremental
+  let i = 0;
+  function type() {
+    if (i >= source.length) return;
+    out.textContent += source.slice(i, i + chunk);
+    i += chunk;
+    setTimeout(type, speed);
+  }
+  // Si el texto está vacío, muestra puntos "pensando"
+  if (!source.trim()) {
+    const dots = ["·","··","···",""];
+    let d = 0;
+    setInterval(() => { out.textContent = "Pensando"+dots[d++%dots.length]; }, 350);
+  } else {
+    type();
+  }
+})();
+</script>
 </body>
 </html>`;
 
-    return res.status(200).send(html);
-  } catch (e) {
-    return res.status(500).send(`<!doctype html><pre>UI error: ${String(e)}</pre>`);
-  }
+  return res.status(200).send(html);
 };
