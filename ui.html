@@ -41,7 +41,7 @@
   .who{
     font-size:11px; color:#98a0ae; margin:0 0 2px 2px; line-height:1;
   }
-  .text{ /* contenedor del contenido de mensaje */ }
+  .text{}
   .meta{
     display:flex; justify-content:flex-end; gap:8px;
     font-size:10.5px; color:#8b93a3; margin-top:4px; opacity:.9;
@@ -75,7 +75,6 @@
     color:#ddd; padding:8px 12px; border-radius:10px; font-size:14px;
   }
 
-  /* Accesibilidad */
   @media (prefers-reduced-motion: reduce){
     .typing{ animation:none; border-right:none }
   }
@@ -84,7 +83,6 @@
 <body>
   <header>
     <div class="brand">
-      <!-- Orbe Grooky: ondas amarillo + verde‑azul -->
       <canvas id="grookyCanvas" width="60" height="60" aria-hidden="true"></canvas>
       <h1 id="title">Grooky</h1>
     </div>
@@ -93,7 +91,6 @@
   <main id="chat" aria-live="polite"></main>
 
   <form id="form" autocomplete="off">
-    <!-- Mic minimal con SVG -->
     <button id="mic" type="button" title="Dictar" aria-label="Dictar">
       <svg viewBox="0 0 24 24" fill="none" stroke="#e8e8ea" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/>
@@ -107,45 +104,49 @@
 
 <script>
 (() => {
-  // ---------- Parámetros ----------
+  /* -------- Parámetros -------- */
   const qs       = new URLSearchParams(location.search);
-  const APIURL   = "/api/siri-gpt"; // mismo dominio
+  const APIURL   = "/api/siri-gpt";
   const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
 
-  // Caso 2: sembrar primer turno resuelto
+  // Sembrado (caso 2)
   const INIT_U   = qs.get("u") || ""; // user
   const INIT_A   = qs.get("a") || ""; // assistant
   const TITLE    = qs.get("title") || "Grooky";
   const SPEED    = Math.max(1, parseInt(qs.get("speed") || "18", 10));
   const CHUNK    = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
   const THREAD   = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
-  const VOICE_L  = qs.get("voice") || "es-ES"; // idioma dictado (si disponible)
+  const RESET    = qs.get("reset") === "1";
+  const VOICE_L  = qs.get("voice") || "es-ES";
 
   document.getElementById("title").textContent = TITLE;
 
-  // ---------- DOM ----------
+  /* -------- DOM -------- */
   const $chat  = document.getElementById("chat");
   const $form  = document.getElementById("form");
   const $input = document.getElementById("input");
   const $send  = document.getElementById("send");
   const $mic   = document.getElementById("mic");
 
-  // ---------- Historial ----------
+  /* -------- Historial -------- */
   const KEY = "siri_ui_chat_" + THREAD;
-  let history = loadHistory(); // incluye prompt de sistema [0]
+  if (RESET) localStorage.removeItem(KEY);
+
+  let history = loadHistory(); // incluye [system] con ts
   renderAll();
 
-  // Sembrado: escribir con typing la primera respuesta (y guardar con timestamp)
+  // Sembrado del primer par (u/a) con typing en la respuesta
   (async () => {
     if (INIT_U.trim() && INIT_A.trim()) {
-      const now = Date.now();
-      renderRow("user", INIT_U.trim(), now);
-      const el = startTypingSkeleton();               // devolverá un elemento único (sin id global)
-      await typewrite(el, INIT_A.trim(), SPEED, CHUNK);
-      el.classList.remove("typing");
-      el.textContent = INIT_A.trim();
-
-      history.push({ role:"user", content: INIT_U.trim(), ts: now });
+      const tsU = Date.now();
+      // Render y persist del user
+      addUser(INIT_U.trim(), tsU);
+      // Typing de la respuesta inicial
+      const typingEl = startTypingSkeleton(Date.now());
+      await typewrite(typingEl, INIT_A.trim(), SPEED, CHUNK);
+      typingEl.classList.remove("typing");
+      typingEl.textContent = INIT_A.trim();
+      // Persist assistant
       history.push({ role:"assistant", content: INIT_A.trim(), ts: Date.now() });
       saveHistory();
     } else if (INIT_U.trim()) {
@@ -155,16 +156,11 @@
     }
   })();
 
-  // Envío por formulario
-  $form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    submitMessage();
-  });
-
-  // Auto‑resize del textarea
+  /* -------- Eventos -------- */
+  $form.addEventListener("submit", (e) => { e.preventDefault(); submitMessage(); });
   $input.addEventListener("input", autoResize);
 
-  // ---------- Mic / Dictado minimal ----------
+  // Mic minimal con fallback
   const supportsSR = "webkitSpeechRecognition" in window;
   if (!supportsSR) {
     $mic.addEventListener("click", () => {
@@ -176,10 +172,7 @@
     let rec;
     try { rec = new webkitSpeechRecognition(); } catch {}
     if (rec) {
-      rec.lang = VOICE_L;
-      rec.continuous = false;
-      rec.interimResults = true;
-
+      rec.lang = VOICE_L; rec.continuous = false; rec.interimResults = true;
       let finalText = "";
       rec.onstart  = () => { $mic.classList.add("rec"); showToast("Escuchando…"); };
       rec.onresult = (e) => {
@@ -197,101 +190,85 @@
         $mic.classList.remove("rec");
         $input.value = finalText.trim() || $input.value.trim();
         autoResize();
-        // Auto‑enviar al terminar de dictar (opcional):
+        // Si quieres auto-enviar tras dictado, descomenta:
         // if ($input.value.trim()) submitMessage();
       };
-
-      $mic.addEventListener("click", () => {
-        try { finalText = ""; rec.start(); } catch { /* ignore */ }
-      });
+      $mic.addEventListener("click", () => { try { finalText = ""; rec.start(); } catch {} });
     }
   }
 
-  // ---------- Utilidades de formato ----------
+  /* -------- Utilidades de formato -------- */
   const fmt2 = n => (n<10 ? "0"+n : ""+n);
-  function fmtTime(ts){
-    const d = new Date(ts || Date.now());
-    return `${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`;
-  }
+  function fmtTime(ts){ const d = new Date(ts || Date.now()); return `${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`; }
 
-  // ---------- UI / Historial ----------
+  /* -------- Render / Historial -------- */
   function loadHistory() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    return [{ role: "system", content: "Eres un asistente útil y conciso.", ts: Date.now() }];
+    return [{ role:"system", content:"Eres un asistente útil y conciso.", ts: Date.now() }];
   }
-  function saveHistory() {
-    try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {}
-  }
+  function saveHistory() { try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {} }
 
   function renderRow(role, content, ts){
     const row = document.createElement("div");
     row.className = "msg " + (role === "user" ? "user" : "assistant");
-    const time = fmtTime(ts);
     row.innerHTML = `
       <div class="bubble">
         <div class="who">${role === "user" ? "Tú" : "Grooky"}</div>
         <div class="text">${escapeHTML(content)}</div>
-        <div class="meta">${time}</div>
+        <div class="meta">${fmtTime(ts)}</div>
       </div>`;
     $chat.appendChild(row);
     $chat.scrollTo({ top: $chat.scrollHeight });
     return row;
   }
-  function addUser(text) {
-    const ts = Date.now();
+  function addUser(text, ts = Date.now()) {
     renderRow("user", text, ts);
-    history.push({ role: "user", content: text, ts });
+    history.push({ role:"user", content:text, ts });
     saveHistory();
   }
-  function addAssistant(text) {
-    const ts = Date.now();
+  function addAssistant(text, ts = Date.now()) {
     renderRow("assistant", text, ts);
-    history.push({ role: "assistant", content: text, ts });
+    history.push({ role:"assistant", content:text, ts });
     saveHistory();
   }
   function renderAll(){
     $chat.innerHTML = "";
-    for (const msg of history) {
-      if (msg.role === "system") continue;
-      renderRow(msg.role, msg.content, msg.ts);
+    for (const m of history) {
+      if (m.role === "system") continue;
+      renderRow(m.role, m.content, m.ts);
     }
   }
-  function startTypingSkeleton() {
-    // Crea burbuja de Grooky + contenedor de texto con clase 'typing' y devuelve ese elemento,
-    // para no usar ids globales (evita sobrescribir mensajes anteriores).
+  function startTypingSkeleton(ts){
     const row = document.createElement("div");
     row.className = "msg assistant";
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    const who = document.createElement("div");
-    who.className = "who"; who.textContent = "Grooky";
-    const text = document.createElement("div");
-    text.className = "text typing"; // ← este es el que devolvemos
-    const meta = document.createElement("div");
-    meta.className = "meta"; meta.textContent = fmtTime(Date.now());
+    const bubble = document.createElement("div"); bubble.className = "bubble";
+    const who = document.createElement("div"); who.className = "who"; who.textContent = "Grooky";
+    const text = document.createElement("div"); text.className = "text typing";
+    const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = fmtTime(ts);
     bubble.appendChild(who); bubble.appendChild(text); bubble.appendChild(meta);
-    row.appendChild(bubble);
-    $chat.appendChild(row);
+    row.appendChild(bubble); $chat.appendChild(row);
     $chat.scrollTo({ top: $chat.scrollHeight });
-    return text; // elemento único
+    return text;
   }
 
-  // ---------- Backend (turnos siguientes) ----------
+  /* -------- Backend (turnos siguientes) -------- */
   async function submitMessage() {
     const text = ($input.value || "").trim();
     if (!text) return;
-    $input.value = "";
-    autoResize();
+    $input.value = ""; autoResize();
 
     addUser(text);
-    const typingEl = startTypingSkeleton();
+    const typingEl = startTypingSkeleton(Date.now());
     disable(true);
 
     try {
-      const payload = { model: MODEL, messages: history };
+      // ⚠️ Sanitiza: solo {role, content} (sin ts) para compatibilidad OpenAI/Groq
+      const msgs = history.map(m => ({ role: m.role, content: m.content }));
+      const payload = { model: MODEL, messages: msgs };
+
       const r = await fetch(APIURL, {
         method: "POST",
         headers: { "Content-Type":"application/json" },
@@ -299,8 +276,8 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Error de API");
-      const reply = String(data.response || "");
 
+      const reply = String(data.response || "");
       await typewrite(typingEl, reply, SPEED, CHUNK);
       typingEl.classList.remove("typing");
       typingEl.textContent = reply;
@@ -316,7 +293,7 @@
     }
   }
 
-  // ---------- Funciones comunes ----------
+  /* -------- Comunes -------- */
   function typewrite(targetEl, text, speed, chunk) {
     return new Promise(resolve => {
       let i = 0;
@@ -332,23 +309,11 @@
   function escapeHTML(s="") {
     return s.replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
   }
-  function disable(b) {
-    $send.disabled = b;
-    $input.disabled = b;
-    $mic.disabled  = b;
-  }
-  function autoResize(){
-    $input.style.height = "auto";
-    $input.style.height = Math.min(120, $input.scrollHeight) + "px";
-  }
-  function showToast(msg){
-    const t = document.createElement("div");
-    t.className = "toast"; t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => { t.remove(); }, 2000);
-  }
+  function disable(b) { $send.disabled = b; $input.disabled = b; $mic.disabled = b; }
+  function autoResize(){ $input.style.height = "auto"; $input.style.height = Math.min(120, $input.scrollHeight) + "px"; }
+  function showToast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
 
-  // ---------- Grooky canvas: ondas amarillo + verde‑azul ----------
+  /* -------- Grooky canvas: ondas amarillo + verde‑azul -------- */
   const cv = document.getElementById("grookyCanvas");
   const ctx = cv.getContext("2d");
   const DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -358,34 +323,22 @@
   let t = 0;
   function draw(){
     ctx.clearRect(0,0,W,H);
-
-    // Clip circular
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(W/2, H/2, W/2, 0, Math.PI*2);
-    ctx.clip();
+    ctx.beginPath(); ctx.arc(W/2, H/2, W/2, 0, Math.PI*2); ctx.clip();
 
-    // Fondo suave
     const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W/2);
     bg.addColorStop(0, "rgba(255,213,79,0.15)");  // amarillo
     bg.addColorStop(1, "rgba(0,216,167,0.10)");   // verde‑azul
-    ctx.fillStyle = bg;
-    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
 
-    // Onda 1 (amarillo)
     wave("#FFD54F", 1.6, 0.020, t*1.1);
-    // Onda 2 (verde‑azul)
     wave("#00D8A7", 1.3, 0.024, t*1.35 + 2.0);
 
     ctx.restore();
-
-    // Glow exterior
-    ctx.strokeStyle = "rgba(255,213,79,0.35)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,213,79,0.35)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(W/2, H/2, W/2-0.5, 0, Math.PI*2); ctx.stroke();
 
-    t += 0.03;
-    requestAnimationFrame(draw);
+    t += 0.03; requestAnimationFrame(draw);
   }
   function wave(color, amp, freq, phase){
     ctx.beginPath();
@@ -395,9 +348,7 @@
         + Math.sin(x*freq*0.5 + phase*0.7) * (H/20);
       x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     }
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = color;
-    ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke();
   }
   draw();
 })();
