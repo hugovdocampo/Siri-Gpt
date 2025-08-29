@@ -2,7 +2,7 @@
 // Orbe animado de Grooky (ondas amarillo + verde-azul) en <canvas> circular.
 // - Respeta 'prefers-reduced-motion'.
 // - Pausa/reanuda con visibilitychange.
-// - Se adapta a DPR y resize del canvas.
+// - Se adapta a DPR y resize del canvas (con debounce).
 // - Limpieza segura via destroyOrb().
 //
 // API:
@@ -26,7 +26,7 @@ const _state = new WeakMap();
 export function initOrb(canvas, opts = {}) {
   if (!(canvas instanceof HTMLCanvasElement)) return;
 
-  // Evita doble init
+  // Evita doble init sobre el mismo canvas
   if (_state.has(canvas)) {
     destroyOrb(canvas);
   }
@@ -43,53 +43,74 @@ export function initOrb(canvas, opts = {}) {
     h: 0,
     t: 0,
     rafId: 0,
-    ro: null, // ResizeObserver
-    mm: null, // matchMedia listener
+    ro: null,           // ResizeObserver
+    _resizePending: false,
+    _onResize: null,    // listener fallback
+    mm: null,           // media query listener
+    _onVis: null,       // visibilitychange listener
+    paused: false,
     opts: {
-      speed:     isFinite(opts.speed) ? Number(opts.speed) : 0.03,
-      amp1:      isFinite(opts.amp1) ? Number(opts.amp1) : 1.6,
-      amp2:      isFinite(opts.amp2) ? Number(opts.amp2) : 1.3,
-      freq1:     isFinite(opts.freq1) ? Number(opts.freq1) : 0.020,
-      freq2:     isFinite(opts.freq2) ? Number(opts.freq2) : 0.024,
-      strokeGlow:isFinite(opts.strokeGlow) ? Number(opts.strokeGlow) : 0.35,
-      color1:    YELLOW,
-      color2:    TEAL
-    },
-    paused: false
+      speed:      Number.isFinite(opts.speed) ? Number(opts.speed) : 0.03,
+      amp1:       Number.isFinite(opts.amp1) ? Number(opts.amp1)  : 1.6,
+      amp2:       Number.isFinite(opts.amp2) ? Number(opts.amp2)  : 1.3,
+      freq1:      Number.isFinite(opts.freq1) ? Number(opts.freq1) : 0.020,
+      freq2:      Number.isFinite(opts.freq2) ? Number(opts.freq2) : 0.024,
+      strokeGlow: Number.isFinite(opts.strokeGlow) ? Number(opts.strokeGlow) : 0.35,
+      color1:     YELLOW,
+      color2:     TEAL
+    }
   };
 
   if (!state.ctx) return;
 
   _state.set(canvas, state);
 
-  // Inicializa tamaño en función del CSS + DPR
+  // ----- Medidas y DPR (con guard para evitar bucles) -----
   const setupSize = () => {
     const rect = canvas.getBoundingClientRect();
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const dpr  = Math.max(1, window.devicePixelRatio || 1);
+    const nextW = Math.max(1, Math.round(rect.width));
+    const nextH = Math.max(1, Math.round(rect.height));
+
+    // Si nada cambió, no tocar canvas (evita bucles del ResizeObserver)
+    if (state.w === nextW && state.h === nextH && state.dpr === dpr) {
+      return;
+    }
+
     state.dpr = dpr;
-    state.w = Math.max(1, Math.round(rect.width));
-    state.h = Math.max(1, Math.round(rect.height));
-    canvas.width = Math.max(1, Math.floor(state.w * dpr));
+    state.w   = nextW;
+    state.h   = nextH;
+
+    canvas.width  = Math.max(1, Math.floor(state.w * dpr));
     canvas.height = Math.max(1, Math.floor(state.h * dpr));
     state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // escala el contexto
   };
 
   setupSize();
 
-  // Observa cambios de tamaño del canvas
+  // Observa cambios de tamaño del canvas (debounced con rAF)
   if ('ResizeObserver' in window) {
-    state.ro = new ResizeObserver(() => setupSize());
+    state.ro = new ResizeObserver(() => {
+      if (state._resizePending) return;
+      state._resizePending = true;
+      requestAnimationFrame(() => {
+        state._resizePending = false;
+        setupSize();
+      });
+    });
     state.ro.observe(canvas);
   } else {
-    // Fallback simple
-    window.addEventListener('resize', setupSize);
+    // Fallback simple a resize de ventana
+    state._onResize = () => setupSize();
+    window.addEventListener('resize', state._onResize, { passive: true });
   }
 
   // Respeta preferencias de movimiento reducido
   const mql = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const applyReducedMotion = () => {
     state.paused = !!(mql && mql.matches);
-    if (!state.paused) loop(); // relanza si despausado
+    // Si se despausa y el doc no está oculto, (re)lanza el loop
+    if (!state.paused && !document.hidden && !state.rafId) loop();
   };
   if (mql) {
     state.mm = applyReducedMotion;
@@ -97,21 +118,19 @@ export function initOrb(canvas, opts = {}) {
     applyReducedMotion();
   }
 
-  // Pausa al perder visibilidad
+  // Pausa/reanuda por visibilidad
   const onVis = () => {
-    if (document.hidden) {
+    if (document.hidden || state.paused) {
       cancelAnimationFrame(state.rafId);
       state.rafId = 0;
-    } else if (!state.paused) {
+    } else if (!state.rafId) {
       loop();
     }
   };
   document.addEventListener('visibilitychange', onVis);
-
-  // Guarda para limpieza
   state._onVis = onVis;
 
-  // Bucle principal
+  // ----- Bucle principal -----
   function loop() {
     if (state.paused || document.hidden) return;
     draw(canvas, state);
@@ -130,20 +149,28 @@ export function initOrb(canvas, opts = {}) {
 export function destroyOrb(canvas) {
   const state = _state.get(canvas);
   if (!state) return;
+
   cancelAnimationFrame(state.rafId);
   state.rafId = 0;
+
   if (state.ro) {
     try { state.ro.disconnect(); } catch {}
-  } else {
-    window.removeEventListener('resize', () => {});
+    state.ro = null;
+  }
+  if (state._onResize) {
+    try { window.removeEventListener('resize', state._onResize); } catch {}
+    state._onResize = null;
   }
   const mql = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   if (mql && state.mm) {
-    mql.removeEventListener?.('change', state.mm);
+    try { mql.removeEventListener?.('change', state.mm); } catch {}
+    state.mm = null;
   }
   if (state._onVis) {
-    document.removeEventListener('visibilitychange', state._onVis);
+    try { document.removeEventListener('visibilitychange', state._onVis); } catch {}
+    state._onVis = null;
   }
+
   _state.delete(canvas);
 }
 
@@ -201,20 +228,13 @@ function wave(ctx, W, H, color, amp, freq, phase) {
 
 /**
  * Convierte un color hex (#RRGGBB) a rgba con alpha.
- * Si el color no es hex, retorna con alpha vía canvas globalAlpha (fallback).
+ * Si el color no es hex, retorna un rgba negro con alpha como fallback.
  */
 function hexWithAlpha(hex, alpha) {
   // Soporta #RGB o #RRGGBB
   const m = String(hex).trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (!m) {
-    // No es hex: devolver color tal cual y ojalá sea CSS válido con alpha (fallback)
-    // Pero aquí devolvemos 'rgba(0,0,0,alpha)' para no romper
-    try {
-      // Podríamos parsear otros formatos, pero mantengamos simple
-      return `rgba(0,0,0,${alpha})`;
-    } catch {
-      return hex;
-    }
+    return `rgba(0,0,0,${alpha})`;
   }
   let c = m[1];
   if (c.length === 3) {
