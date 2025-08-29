@@ -59,6 +59,21 @@
       Enviar
     </button>
   </form>
+<script>
+  // Diagnóstico temporal
+  window.addEventListener('error', e => {
+    const pre = document.createElement('pre');
+    pre.className = 'toast';
+    pre.textContent = 'JS Error: ' + (e.message || e.error);
+    document.body.appendChild(pre);
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const pre = document.createElement('pre');
+    pre.className = 'toast';
+    pre.textContent = 'Promise: ' + (e.reason && (e.reason.message || e.reason)) ;
+    document.body.appendChild(pre);
+  });
+</script>
 
 <!-- Entry (ESM) -->
 <script type="module" src="/js/app.js?v=20250829"></script>
