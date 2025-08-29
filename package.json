@@ -1,7 +1,13 @@
 {
-  "name": "siri-gpt-proxy",
+  "name": "grooky-assistant",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "vercel-build": ""
+  }
 }
