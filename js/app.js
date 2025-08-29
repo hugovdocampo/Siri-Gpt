@@ -8,7 +8,11 @@ import { createHistory } from './state/history.js';
 import { seedFirstTurn } from './state/seeder.js';
 
 import * as dom from './ui/dom.js';
-import { typewrite } from './ui/typing.js';
+import * as md from './markdown/markdown.js';
+
+// Precarga marked + DOMPurify antes del primer render
+await md.ensureMarkdownReady();
+
 import { toast } from './ui/toast.js';
 import { initOrb } from './ui/orb.js';
 
