@@ -1,6 +1,6 @@
 // /js/markdown/markdown.js
-// Render de Markdown seguro (marked + DOMPurify) y "strip" para typing.
-// Carga dinámica por CDN (evita que ui.html tenga URLs sueltas).
+// Render Markdown seguro (marked + DOMPurify) y "strip" para typing.
+// Carga dinámica por CDN; regex bien formados (sin dobles backslashes).
 
 const CDN = {
   marked: 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js',
@@ -9,7 +9,7 @@ const CDN = {
 
 let _loaded = false;
 
-/** Inserta un <script src="..."> y espera a que cargue o falle */
+/** Inserta <script src="..."> y espera a que cargue o falle */
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -26,10 +26,9 @@ function loadScript(src) {
 async function ensureLoaded() {
   if (_loaded && window.marked && window.DOMPurify) return;
 
-  if (!window.marked)   await loadScript(CDN.marked);
+  if (!window.marked)    await loadScript(CDN.marked);
   if (!window.DOMPurify) await loadScript(CDN.dompurify);
 
-  // Config básica de marked
   try {
     window.marked.setOptions({
       gfm: true,
@@ -37,12 +36,12 @@ async function ensureLoaded() {
       headerIds: false,
       mangle: false
     });
-  } catch { /* no-op si versión sin setOptions */ }
+  } catch { /* ok */ }
 
   _loaded = true;
 }
 
-/** Añade target/rel seguros a enlaces del HTML ya sanitizado */
+/** Añade target/rel seguros a los enlaces */
 function addLinkAttrs(html) {
   const div = document.createElement('div');
   div.innerHTML = html;
@@ -53,69 +52,79 @@ function addLinkAttrs(html) {
   return div.innerHTML;
 }
 
+/** Escapa HTML básico (fallback) */
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+  }[ch]));
+}
+
 /**
  * Renderiza Markdown a HTML seguro.
- * - Usa marked para parsear
- * - Sanitiza con DOMPurify
- * - Ajusta enlaces (target/rel)
  * @param {string} mdText
- * @returns {string} HTML
+ * @returns {string}
  */
 export function render(mdText) {
   const src = typeof mdText === 'string' ? mdText : String(mdText ?? '');
   if (!src.trim()) return '';
-  // NOTA: no hacemos await aquí; app.js/seeder esperan que sea sync.
-  // Aseguramos carga previa cuando app.js arranca (primera llamada puede pagar la carga, es rápido).
+
+  // Si llegamos antes de que carguen las libs, devolvemos texto escapado y disparamos la carga.
   if (!_loaded || !window.marked || !window.DOMPurify) {
-    // Carga perezosa sin bloquear en exceso: devolvemos texto escapado
-    // y que la próxima llamada ya traiga las libs. (Opcional)
     queueMicrotask(() => ensureLoaded().catch(console.error));
     return escapeHTML(src);
   }
+
   const raw = window.marked.parse(src);
   const clean = window.DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
   return addLinkAttrs(clean);
 }
 
+/* ==================== strip (para typing) ==================== */
+/* Literales REGEXP correctos (una sola barra invertida).       */
+
+// Code fences ```...```
+const RE_FENCE        = /```[\s\S]*?```/g;
+// Inline code `...`
+const RE_INLINE       = /`([^`]+)`/g;
+// Negritas / itálicas
+const RE_BOLD_ASTER   = /\*\*([^*]+)\*\*/g;
+const RE_ITALIC_ASTER = /\*([^*]+)\*/g;
+const RE_BOLD_UNDER   = /__([^_]+)__/g;
+const RE_ITALIC_UNDER = /_([^_]+)_/g;
+// Imágenes !alt
+const RE_IMAGE        = /!\\[[^\\]]*\]\\([^)]+\\)/g;
+// Enlaces text
+const RE_LINK         = /\\[([^\\]]+)\]\\(([^)]+)\\)/g;
+// Listas
+const RE_UL_BULLET    = /^\s*[-*+]\s+/gm;
+const RE_OL_NUM       = /^\s*\d+\.\s+/gm;
+// Tablas / separadores
+const RE_TABLE_ROW    = /^\|.*\|$/gm;
+const RE_HR           = /^---+$/gm;
+
 /**
- * Convierte Markdown a texto plano para "typing"
- * (evita cortar etiquetas y queda legible).
+ * Convierte Markdown a texto plano legible para el typing.
  * @param {string} mdText
  * @returns {string}
  */
 export function strip(mdText = '') {
   return String(mdText ?? '')
-    // code fences → texto interior
-    .replace(/```[\s\S]*?```/g, s => s.replace(/```/g, ''))
-    // inline code
-    .replace(/`([^`]+)`/g, '$1')
-    // **bold**, *italic*, __bold__, _italic_
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    // imágenes: fuera
-    .replace(/!\\[[^\\]]*]\\([^)]*\\)/g, '')
-    // links: deja el texto
-    .replace(/\\[([^\\]
-]+)\]\\(([^)]+)\\)/g, '$1')
-    // listas: bullets normales
-    .replace(/^\s*[-*+]\s+/gm, '• ')
-    .replace(/^\s*\d+\.\s+/gm, m => m)
-    // tablas y HR se degradan a texto plano
-    .replace(/^\|.*\|$/gm, s => s.replace(/\|/g, ' ').trim())
-    .replace(/^---+$/gm, '—')
+    .replace(RE_FENCE, s => s.replace(/```/g, ''))
+    .replace(RE_INLINE, '$1')
+    .replace(RE_BOLD_ASTER, '$1')
+    .replace(RE_ITALIC_ASTER, '$1')
+    .replace(RE_BOLD_UNDER, '$1')
+    .replace(RE_ITALIC_UNDER, '$1')
+    .replace(RE_IMAGE, '')
+    .replace(RE_LINK, '$1')
+    .replace(RE_UL_BULLET, '• ')
+    .replace(RE_OL_NUM, m => m)
+    .replace(RE_TABLE_ROW, s => s.replace(/\|/g, ' ').trim())
+    .replace(RE_HR, '—')
     .trim();
 }
 
-/** Escapa HTML básico para fallback sin libs */
-function escapeHTML(s) {
-  return s.replace(/[&<>"]/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
-  }[ch]));
-}
-
-/** (Opcional) expone el loader por si quieres forzar la precarga desde app.js */
+/** Permite precargar explícitamente desde app.js */
 export async function ensureMarkdownReady() {
   await ensureLoaded();
 }
