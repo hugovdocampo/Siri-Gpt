@@ -248,6 +248,29 @@ textarea:focus-visible { outline-offset: 3px; }
 .w-100         { width: 100% !important; }
 .maxw-900      { max-width: 900px !important; margin-left: auto; margin-right: auto; }
 
+/* Recalcular para ultimo mensaje */
+:root {
+  --composer-h: 64px; /* altura inicial del composer */
+  --kb: 0px;          /* altura del teclado (iOS) */
+}
+
+/* Chat: deja hueco dinámico al final */
+#chat {
+  padding-bottom: calc(var(--composer-h) + max(12px, env(safe-area-inset-bottom)) + var(--kb));
+}
+
+/* Composer fijo abajo */
+.composer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  padding: 10px max(10px, env(safe-area-inset-right))
+           calc(10px + env(safe-area-inset-bottom) + var(--kb))
+           max(10px, env(safe-area-inset-left));
+  background: var(--bg);
+  border-top: 1px solid #1b1b21;
+}
+
 /* Colores de feedback ligeros (para toasts, badges, etc.) */
 .text-ok   { color: var(--ok); }
 .text-warn { color: var(--warn); }
