@@ -239,7 +239,8 @@
 /* ---------- Utilidades locales del chat ---------- */
 
 /* Oculta mensajes vacíos que puedan colarse por errores de parseo */
-.msg:has(.text:empty) { display: none; }
+.msg:has(.text:not(.typing):empty) { display: none; }
+
 
 /* Evita micro-saltos cuando el skeleton de typing aparece */
 .msg.assistant .text.typing:empty::before {
