@@ -13,20 +13,25 @@
     font-family:-apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     display:flex; flex-direction:column; min-height:100%;
   }
+
+  /* Header */
   header{
-    display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #1e1e24;
-    position:sticky; top:0; background:#0b0b0d; z-index:2;
+    display:flex; align-items:center; gap:12px; padding:12px 16px;
+    border-bottom:1px solid #1e1e24; position:sticky; top:0; background:#0b0b0d; z-index:2;
   }
-  .orb{ position:relative; width:28px; height:28px; border-radius:50%;
+  .orb{
+    position:relative; width:28px; height:28px; border-radius:50%;
     background:
-      radial-gradient(60% 60% at 50% 50%, rgba(125,0,255,.7) 0%, transparent 60%),
-      radial-gradient(60% 60% at 70% 30%, rgba(0,200,255,.6) 0%, transparent 60%),
-      radial-gradient(60% 60% at 30% 70%, rgba(255,40,140,.5) 0%, transparent 60%);
-    box-shadow:0 0 20px rgba(125,0,255,.35), 0 0 26px rgba(0,200,255,.25), inset 0 0 10px rgba(255,255,255,.08);
+      radial-gradient(60% 60% at 50% 50%, rgba(125,0,255,.70) 0%, transparent 60%),
+      radial-gradient(60% 60% at 70% 30%, rgba(0,200,255,.60) 0%, transparent 60%),
+      radial-gradient(60% 60% at 30% 70%, rgba(255,40,140,.50) 0%, transparent 60%);
+    box-shadow: 0 0 20px rgba(125,0,255,.35), 0 0 26px rgba(0,200,255,.25), inset 0 0 10px rgba(255,255,255,.08);
     animation: float 3.2s ease-in-out infinite;
   }
   @keyframes float { 0%,100%{transform:translateY(-1px)} 50%{transform:translateY(1px)} }
   h1{ font-size:16px; margin:0; color:#cfcfd8; }
+
+  /* Chat */
   main{ flex:1; overflow:auto; padding:18px; }
   .msg{ max-width:860px; margin:0 auto 12px auto; display:flex; gap:10px; }
   .bubble{
@@ -36,19 +41,39 @@
   .user .bubble{ background:#10202a; border-color:#1e3a45 }
   .assistant .bubble{ background:#14141b; border-color:#23232a }
   .who{ font-size:12px; color:#9aa1ab; margin-left:4px; margin-bottom:4px }
+
+  .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
+  @keyframes caret { 50% { border-color: transparent; } }
+
+  /* Composer */
   form{
-    display:flex; gap:8px; padding:12px; border-top:1px solid #1e1e24; background:#0b0b0d; position:sticky; bottom:0;
+    display:flex; gap:8px; padding:12px; border-top:1px solid #1e1e24;
+    background:#0b0b0d; position:sticky; bottom:0;
   }
   textarea{
-    flex:1; resize:none; min-height:38px; max-height:120px; padding:10px 12px; border-radius:12px; border:1px solid #23232a;
-    background:#121217; color:#e8e8ea; outline:none;
+    flex:1; resize:none; min-height:38px; max-height:120px; padding:10px 12px; border-radius:12px;
+    border:1px solid #23232a; background:#121217; color:#e8e8ea; outline:none;
   }
   button{
     background:#2c2c35; color:#e8e8ea; border:1px solid #3a3a45; border-radius:12px; padding:10px 14px; min-width:90px;
   }
-  .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
-  @keyframes caret { 50% { border-color: transparent; } }
-  .small{ font-size:12px; color:#7c8392; text-align:center; margin:10px 0; }
+  #mic{
+    min-width:44px; padding:8px 10px; font-size:16px; line-height:1;
+  }
+  #mic.rec{ background:#6b254c; border-color:#8b2a5c; }
+
+  /* Toast sencillo */
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:18px; background:#1a1a1f; border:1px solid #2a2a32;
+    color:#ddd; padding:8px 12px; border-radius:10px; font-size:14px;
+  }
+
+  /* Accesibilidad */
+  @media (prefers-reduced-motion: reduce){
+    .orb{ animation:none }
+    .typing{ animation:none; border-right:none }
+  }
 </style>
 </head>
 <body>
@@ -57,54 +82,109 @@
     <h1 id="title">Asistente</h1>
   </header>
 
-  <main id="chat"></main>
+  <main id="chat" aria-live="polite"></main>
 
-  <form id="form">
-    <textarea id="input" placeholder="Escribe tu mensaje..." rows="1"></textarea>
+  <form id="form" autocomplete="off">
+    <button id="mic" type="button" title="Dictar">🎤</button>
+    <textarea id="input" placeholder="Escribe o dicta…" rows="1"></textarea>
     <button id="send" type="submit">Enviar</button>
   </form>
 
 <script>
 (() => {
-  const qs = new URLSearchParams(location.search);
-  const API_URL = "/api/siri-gpt";               // mismo dominio
-  const MODEL   = qs.get("model") || "llama-3.3-70b-versatile";
-  const INIT_Q  = qs.get("q") || qs.get("text") || "";
-  const TITLE   = qs.get("title") || "Asistente";
-  const SPEED   = Math.max(1, parseInt(qs.get("speed") || "18", 10));
-  const CHUNK   = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
-  const THREAD  = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
+  // ---------- Config ----------
+  const qs     = new URLSearchParams(location.search);
+  const APIURL = "/api/siri-gpt"; // mismo dominio (Vercel)
+  const MODEL  = qs.get("model") || "llama-3.3-70b-versatile";
+  const INIT_Q = qs.get("q") || "";                 // primer turno del usuario
+  const TITLE  = qs.get("title") || "Asistente";
+  const SPEED  = Math.max(1, parseInt(qs.get("speed") || "18", 10));
+  const CHUNK  = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
+  const THREAD = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
+  const VOICE_LANG = qs.get("voice") || "es-ES";    // idioma para dictado (si se soporta)
+
   document.getElementById("title").textContent = TITLE;
 
-  const $chat = document.getElementById("chat");
-  const $form = document.getElementById("form");
+  // ---------- DOM ----------
+  const $chat  = document.getElementById("chat");
+  const $form  = document.getElementById("form");
   const $input = document.getElementById("input");
-  const $send = document.getElementById("send");
+  const $send  = document.getElementById("send");
+  const $mic   = document.getElementById("mic");
 
-  // Historial en localStorage
+  // ---------- Historial ----------
   const KEY = "siri_ui_chat_" + THREAD;
-  let history = loadHistory();
+  let history = loadHistory(); // incluye prompt de sistema en posición 0
 
-  // Render inicial
   renderAll();
 
-  // Si viene ?q=..., envíalo como primer turno
+  // Si hay ?q=..., precárgalo y envía (primer turno es del usuario)
   if (INIT_Q.trim()) {
     $input.value = INIT_Q.trim();
+    autoResize();
     submitMessage();
   }
 
+  // Envío por formulario
   $form.addEventListener("submit", (e) => {
     e.preventDefault();
     submitMessage();
   });
 
+  // Auto‑resize del textarea
+  $input.addEventListener("input", autoResize);
+
+  // ---------- Mic / Dictado ----------
+  const supportsSR = "webkitSpeechRecognition" in window;
+  if (!supportsSR) {
+    $mic.addEventListener("click", () => {
+      showToast("Dictado no disponible aquí. Abriendo en Safari…");
+      // Abrir misma URL en Safari (donde suele funcionar)
+      const a = document.createElement("a");
+      a.href = location.href; a.target = "_blank"; a.rel="noopener"; a.click();
+    });
+  } else {
+    let rec;
+    try { rec = new webkitSpeechRecognition(); } catch {}
+    if (rec) {
+      rec.lang = VOICE_LANG;
+      rec.continuous = false;
+      rec.interimResults = true;
+
+      let finalText = "";
+      rec.onstart = () => { $mic.classList.add("rec"); showToast("Escuchando…"); };
+      rec.onresult = (e) => {
+        let interim = "";
+        for (let i=0; i<e.results.length; i++){
+          const r = e.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        $input.value = (finalText + interim).trim();
+        autoResize();
+      };
+      rec.onerror = () => { $mic.classList.remove("rec"); showToast("No se pudo usar el dictado"); };
+      rec.onend = () => {
+        $mic.classList.remove("rec");
+        $input.value = finalText.trim() || $input.value.trim();
+        autoResize();
+        // ¿Auto‑enviar al terminar de dictar? Descomenta:
+        // if ($input.value.trim()) submitMessage();
+      };
+
+      $mic.addEventListener("click", () => {
+        try { finalText = ""; rec.start(); } catch { /* ignore */ }
+      });
+    }
+  }
+
+  // ---------- Funciones de UI / Historial ----------
   function loadHistory() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    // iniciamos con un system prompt
+    // Empezamos con un prompt de sistema
     return [{ role: "system", content: "Eres un asistente útil y conciso." }];
   }
 
@@ -115,7 +195,7 @@
   function addUser(text) {
     history.push({ role: "user", content: text });
     saveHistory();
-    renderAll(true); // scrollea al final
+    renderAll(true);
   }
 
   function addAssistant(text) {
@@ -125,7 +205,6 @@
   }
 
   function renderAll(scrollEnd=false) {
-    // pinta todas las burbujas (menos el system)
     $chat.innerHTML = "";
     for (const msg of history) {
       if (msg.role === "system") continue;
@@ -138,7 +217,9 @@
         </div>`;
       $chat.appendChild(row);
     }
-    if (scrollEnd) requestAnimationFrame(() => $chat.scrollTo({ top: $chat.scrollHeight, behavior: "smooth" }));
+    if (scrollEnd) requestAnimationFrame(() =>
+      $chat.scrollTo({ top: $chat.scrollHeight, behavior: "smooth" })
+    );
   }
 
   function startTypingSkeleton() {
@@ -154,23 +235,23 @@
     return document.getElementById("typing");
   }
 
+  // ---------- Envío al backend ----------
   async function submitMessage() {
-    const text = $input.value.trim();
+    const text = ($input.value || "").trim();
     if (!text) return;
     $input.value = "";
-    $input.style.height = "auto";
+    autoResize();
 
-    addUser(text);
-    // placeholder de tipeo
-    const el = startTypingSkeleton();
+    addUser(text);                 // pinta turno de usuario
+    const el = startTypingSkeleton(); // placeholder de tipeo
     disable(true);
 
     try {
       const payload = {
         model: MODEL,
-        messages: history // incluimos TODO el historial (system + turnos anteriores)
+        messages: history      // enviamos TODO el historial (incluye system)
       };
-      const r = await fetch(API_URL, {
+      const r = await fetch(APIURL, {
         method: "POST",
         headers: { "Content-Type":"application/json" },
         body: JSON.stringify(payload)
@@ -179,9 +260,8 @@
       if (!r.ok) throw new Error(data?.error || "Error de API");
       const reply = String(data.response || "");
 
-      // efecto "máquina de escribir" en el placeholder
+      // Efecto "máquina de escribir"
       await typewrite(el, reply, SPEED, CHUNK);
-      // sustituye el placeholder por el mensaje final consolidado
       el.classList.remove("typing");
       el.textContent = reply;
 
@@ -189,7 +269,7 @@
 
     } catch (err) {
       el.classList.remove("typing");
-      el.textContent = "⚠️ " + err.message;
+      el.textContent = "⚠️ " + (err?.message || "Fallo inesperado");
     } finally {
       disable(false);
     }
@@ -208,20 +288,27 @@
     });
   }
 
-  function disable(b) {
-    $send.disabled = b;
-    $input.disabled = b;
-  }
-
   function escapeHTML(s="") {
     return s.replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
   }
 
-  // Auto expand del textarea
-  $input.addEventListener("input", () => {
+  function disable(b) {
+    $send.disabled = b;
+    $input.disabled = b;
+    $mic.disabled  = b;
+  }
+
+  function autoResize(){
     $input.style.height = "auto";
     $input.style.height = Math.min(120, $input.scrollHeight) + "px";
-  });
+  }
+
+  function showToast(msg){
+    const t = document.createElement("div");
+    t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => { t.remove(); }, 2000);
+  }
 })();
 </script>
 </body>
