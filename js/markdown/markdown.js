@@ -92,9 +92,9 @@ const RE_ITALIC_ASTER = /\*([^*]+)\*/g;
 const RE_BOLD_UNDER   = /__([^_]+)__/g;
 const RE_ITALIC_UNDER = /_([^_]+)_/g;
 // Imágenes !alt
-const RE_IMAGE        = /!\\[[^\\]]*\]\\([^)]+\\)/g;
+const RE_IMAGE        = /!\[[^\]]*\]\([^)]+\)/g;
 // Enlaces text
-const RE_LINK         = /\\[([^\\]]+)\]\\(([^)]+)\\)/g;
+const RE_LINK         = /\[([^\]]+)\]\(([^)]+)\)/g;
 // Listas
 const RE_UL_BULLET    = /^\s*[-*+]\s+/gm;
 const RE_OL_NUM       = /^\s*\d+\.\s+/gm;
