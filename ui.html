@@ -62,7 +62,7 @@
   }
   #mic.rec{ background:#6b254c; border-color:#8b2a5c; }
 
-  /* Toast sencillo */
+  /* Toast */
   .toast{
     position:fixed; left:50%; transform:translateX(-50%);
     bottom:18px; background:#1a1a1f; border:1px solid #2a2a32;
@@ -93,15 +93,19 @@
 <script>
 (() => {
   // ---------- Config ----------
-  const qs     = new URLSearchParams(location.search);
-  const APIURL = "/api/siri-gpt"; // mismo dominio (Vercel)
-  const MODEL  = qs.get("model") || "llama-3.3-70b-versatile";
-  const INIT_Q = qs.get("q") || "";                 // primer turno del usuario
-  const TITLE  = qs.get("title") || "Asistente";
-  const SPEED  = Math.max(1, parseInt(qs.get("speed") || "18", 10));
-  const CHUNK  = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
-  const THREAD = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
-  const VOICE_LANG = qs.get("voice") || "es-ES";    // idioma para dictado (si se soporta)
+  const qs       = new URLSearchParams(location.search);
+  const APIURL   = "/api/siri-gpt"; // mismo dominio (Vercel)
+  const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
+
+  // Caso 2: primer turno ya resuelto
+  const INIT_U   = qs.get("u") || ""; // texto del usuario (primer turno)
+  const INIT_A   = qs.get("a") || ""; // respuesta del asistente (primer turno), opcional
+
+  const TITLE    = qs.get("title") || "Asistente";
+  const SPEED    = Math.max(1, parseInt(qs.get("speed") || "18", 10));
+  const CHUNK    = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
+  const THREAD   = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
+  const VOICE_L  = qs.get("voice") || "es-ES"; // idioma para dictado
 
   document.getElementById("title").textContent = TITLE;
 
@@ -114,13 +118,19 @@
 
   // ---------- Historial ----------
   const KEY = "siri_ui_chat_" + THREAD;
-  let history = loadHistory(); // incluye prompt de sistema en posición 0
-
+  let history = loadHistory(); // incluye prompt de sistema en índice 0
   renderAll();
 
-  // Si hay ?q=..., precárgalo y envía (primer turno es del usuario)
-  if (INIT_Q.trim()) {
-    $input.value = INIT_Q.trim();
+  // Sembrado inicial (CASO 2):
+  // - Si vienen u y a → sembrar par user/assistant y NO llamar a la API
+  // - Si solo u → mandar ese turno a la API
+  if (INIT_U.trim() && INIT_A.trim()) {
+    history.push({ role: "user",      content: INIT_U.trim() });
+    history.push({ role: "assistant", content: INIT_A.trim() });
+    saveHistory();
+    renderAll(true);
+  } else if (INIT_U.trim()) {
+    $input.value = INIT_U.trim();
     autoResize();
     submitMessage();
   }
@@ -139,7 +149,6 @@
   if (!supportsSR) {
     $mic.addEventListener("click", () => {
       showToast("Dictado no disponible aquí. Abriendo en Safari…");
-      // Abrir misma URL en Safari (donde suele funcionar)
       const a = document.createElement("a");
       a.href = location.href; a.target = "_blank"; a.rel="noopener"; a.click();
     });
@@ -147,7 +156,7 @@
     let rec;
     try { rec = new webkitSpeechRecognition(); } catch {}
     if (rec) {
-      rec.lang = VOICE_LANG;
+      rec.lang = VOICE_L;
       rec.continuous = false;
       rec.interimResults = true;
 
@@ -168,7 +177,7 @@
         $mic.classList.remove("rec");
         $input.value = finalText.trim() || $input.value.trim();
         autoResize();
-        // ¿Auto‑enviar al terminar de dictar? Descomenta:
+        // ¿Auto‑enviar al terminar de dictar? descomenta:
         // if ($input.value.trim()) submitMessage();
       };
 
@@ -184,7 +193,7 @@
       const raw = localStorage.getItem(KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    // Empezamos con un prompt de sistema
+    // Prompt de sistema inicial
     return [{ role: "system", content: "Eres un asistente útil y conciso." }];
   }
 
@@ -235,21 +244,21 @@
     return document.getElementById("typing");
   }
 
-  // ---------- Envío al backend ----------
+  // ---------- Envío al backend (turnos siguientes) ----------
   async function submitMessage() {
     const text = ($input.value || "").trim();
     if (!text) return;
     $input.value = "";
     autoResize();
 
-    addUser(text);                 // pinta turno de usuario
+    addUser(text);
     const el = startTypingSkeleton(); // placeholder de tipeo
     disable(true);
 
     try {
       const payload = {
         model: MODEL,
-        messages: history      // enviamos TODO el historial (incluye system)
+        messages: history // enviamos TODO el historial (incluye system + lo sembrado)
       };
       const r = await fetch(APIURL, {
         method: "POST",
