@@ -29,13 +29,14 @@
   /* Chat */
   main{ flex:1; overflow:auto; padding:12px; }
   .msg{
-    max-width:860px; margin:0 auto 8px auto; display:flex; flex-direction:column;
+    width:min(900px, 96vw);
+    margin:0 auto 8px auto;
+    display:flex; flex-direction:column;
   }
   .bubble{
     background:#121217; border:1px solid #23232a; border-radius:12px;
     padding:8px 12px; line-height:1.42; white-space:pre-wrap; word-break:break-word;
   }
-  /* Usuario a todo el ancho del hilo */
   .msg.user .bubble{ background:#0f1e27; border-color:#193545; width:100%; }
   .msg.assistant .bubble{ background:#14141b; border-color:#23232a; max-width:100%; }
   .who{
@@ -44,7 +45,7 @@
   .text{}
   .meta{
     display:flex; justify-content:flex-end; gap:8px;
-    font-size:10.5px; color:#8b93a3; margin-top:4px; opacity:.9;
+    font-size:10.5px; color:#8b93a3; margin-top:2px; opacity:.9;
   }
 
   .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
@@ -62,9 +63,7 @@
   button{
     background:#26262f; color:#e8e8ea; border:1px solid #353542; border-radius:11px; padding:9px 12px; min-width:44px;
   }
-  #mic{
-    min-width:44px; padding:8px; display:grid; place-items:center;
-  }
+  #mic{ min-width:44px; padding:8px; display:grid; place-items:center; }
   #mic.rec{ background:#5e2345; border-color:#823157; }
   #mic svg{ width:18px; height:18px; opacity:.9 }
 
@@ -91,6 +90,7 @@
   <main id="chat" aria-live="polite"></main>
 
   <form id="form" autocomplete="off">
+    <!-- Micro minimal con SVG -->
     <button id="mic" type="button" title="Dictar" aria-label="Dictar">
       <svg viewBox="0 0 24 24" fill="none" stroke="#e8e8ea" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/>
@@ -109,9 +109,9 @@
   const APIURL   = "/api/siri-gpt";
   const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
 
-  // Sembrado (caso 2)
-  const INIT_U   = qs.get("u") || ""; // user
-  const INIT_A   = qs.get("a") || ""; // assistant
+  // Acepta u= o q= para el primer turno; a= para la primera respuesta
+  const INIT_U   = qs.get("u") || qs.get("q") || "";
+  const INIT_A   = qs.get("a") || "";
   const TITLE    = qs.get("title") || "Grooky";
   const SPEED    = Math.max(1, parseInt(qs.get("speed") || "18", 10));
   const CHUNK    = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
@@ -132,24 +132,23 @@
   const KEY = "siri_ui_chat_" + THREAD;
   if (RESET) localStorage.removeItem(KEY);
 
-  let history = loadHistory(); // incluye [system] con ts
+  let history = loadHistory(); // incluye [system]
   renderAll();
 
-  // Sembrado del primer par (u/a) con typing en la respuesta
+  // Sembrado del primer par (si u/a vienen por la URL)
   (async () => {
     if (INIT_U.trim() && INIT_A.trim()) {
-      const tsU = Date.now();
-      // Render y persist del user
-      addUser(INIT_U.trim(), tsU);
-      // Typing de la respuesta inicial
+      // pinta tu mensaje y guarda
+      addUser(INIT_U.trim());
+      // typing de la primera respuesta y guarda
       const typingEl = startTypingSkeleton(Date.now());
       await typewrite(typingEl, INIT_A.trim(), SPEED, CHUNK);
       typingEl.classList.remove("typing");
       typingEl.textContent = INIT_A.trim();
-      // Persist assistant
       history.push({ role:"assistant", content: INIT_A.trim(), ts: Date.now() });
       saveHistory();
     } else if (INIT_U.trim()) {
+      // si solo viene la pregunta, la enviamos al backend
       $input.value = INIT_U.trim();
       autoResize();
       submitMessage();
@@ -190,7 +189,7 @@
         $mic.classList.remove("rec");
         $input.value = finalText.trim() || $input.value.trim();
         autoResize();
-        // Si quieres auto-enviar tras dictado, descomenta:
+        // Auto‑enviar tras dictado (opcional):
         // if ($input.value.trim()) submitMessage();
       };
       $mic.addEventListener("click", () => { try { finalText = ""; rec.start(); } catch {} });
@@ -203,10 +202,8 @@
 
   /* -------- Render / Historial -------- */
   function loadHistory() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
+    try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); }
+    catch {}
     return [{ role:"system", content:"Eres un asistente útil y conciso.", ts: Date.now() }];
   }
   function saveHistory() { try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {} }
@@ -265,7 +262,7 @@
     disable(true);
 
     try {
-      // ⚠️ Sanitiza: solo {role, content} (sin ts) para compatibilidad OpenAI/Groq
+      // Sanitiza: solo {role, content}
       const msgs = history.map(m => ({ role: m.role, content: m.content }));
       const payload = { model: MODEL, messages: msgs };
 
@@ -327,8 +324,8 @@
     ctx.beginPath(); ctx.arc(W/2, H/2, W/2, 0, Math.PI*2); ctx.clip();
 
     const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W/2);
-    bg.addColorStop(0, "rgba(255,213,79,0.15)");  // amarillo
-    bg.addColorStop(1, "rgba(0,216,167,0.10)");   // verde‑azul
+    bg.addColorStop(0, "rgba(255,213,79,0.15)");
+    bg.addColorStop(1, "rgba(0,216,167,0.10)");
     ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
 
     wave("#FFD54F", 1.6, 0.020, t*1.1);
