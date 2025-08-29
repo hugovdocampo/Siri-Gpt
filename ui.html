@@ -7,11 +7,13 @@
 <title>Grooky</title>
 <style>
   :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
   html, body { height:100% }
   body{
     margin:0; background:#0b0b0d; color:#e8e8ea;
     font-family:-apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     display:flex; flex-direction:column; min-height:100%;
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
   /* Header */
@@ -23,38 +25,59 @@
   #grookyCanvas{
     width:30px; height:30px; border-radius:50%;
     box-shadow: 0 0 18px rgba(255,212,79,.25), 0 0 18px rgba(0,216,167,.18);
+    flex:0 0 auto;
   }
   h1{ font-size:16px; margin:0; color:#dcdce4; letter-spacing:.2px }
 
-  /* Chat */
-  main{ flex:1; overflow:auto; padding:12px; }
+  /* Chat (safe-areas) */
+  main{
+    flex:1; overflow:auto;
+    padding:12px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+  }
   .msg{
-    width:min(900px, 96vw);
+    width:min(900px, calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 24px));
     margin:0 auto 8px auto;
     display:flex; flex-direction:column;
   }
+
+  /* Burbuja con layout en grid: título (quién), texto y meta (hora) */
   .bubble{
+    display:grid; grid-template-rows:auto 1fr auto;
     background:#121217; border:1px solid #23232a; border-radius:12px;
-    padding:8px 12px; line-height:1.42; white-space:pre-wrap; word-break:break-word;
+    padding:8px 12px; line-height:1.42;
+    white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; max-width:100%;
   }
   .msg.user .bubble{ background:#0f1e27; border-color:#193545; width:100%; }
-  .msg.assistant .bubble{ background:#14141b; border-color:#23232a; max-width:100%; }
+  .msg.assistant .bubble{ background:#14141b; border-color:#23232a; width:100%; }
+
   .who{
     font-size:11px; color:#98a0ae; margin:0 0 2px 2px; line-height:1;
   }
-  .text{}
+  .text{ margin:0; }
+  .text p { margin:.45em 0; }
   .meta{
-    display:flex; justify-content:flex-end; gap:8px;
-    font-size:10.5px; color:#8b93a3; margin-top:2px; opacity:.9;
+    display:flex; justify-content:flex-end; align-items:center;
+    font-size:10.5px; color:#8b93a3; margin-top:4px; padding-right:2px; opacity:.9;
+    white-space:nowrap;
   }
 
   .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
   @keyframes caret { 50% { border-color: transparent; } }
 
+  /* Markdown (Grooky) */
+  .text code, .text pre { background:#191922; border:1px solid #2a2a32; border-radius:6px; }
+  .text code { padding:.15em .35em; }
+  .text pre { padding:.6em .8em; overflow:auto; }
+  .text table { width:100%; border-collapse:collapse; display:block; overflow-x:auto; }
+  .text th, .text td { border:1px solid #2a2a32; padding:6px 8px; text-align:left; }
+  .text blockquote { border-left:3px solid #2a2a32; margin:.4em 0; padding:.2em .8em; color:#b8bfcd; }
+
   /* Composer */
   form{
     display:flex; gap:8px; padding:10px; border-top:1px solid #1b1b21;
     background:#0b0b0d; position:sticky; bottom:0;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right:max(10px, env(safe-area-inset-right));
   }
   textarea{
     flex:1; resize:none; min-height:38px; max-height:120px; padding:9px 11px; border-radius:11px;
@@ -90,7 +113,7 @@
   <main id="chat" aria-live="polite"></main>
 
   <form id="form" autocomplete="off">
-    <!-- Micro minimal con SVG -->
+    <!-- Mic minimal con SVG -->
     <button id="mic" type="button" title="Dictar" aria-label="Dictar">
       <svg viewBox="0 0 24 24" fill="none" stroke="#e8e8ea" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/>
@@ -102,6 +125,10 @@
     <button id="send" type="submit" title="Enviar" aria-label="Enviar">Enviar</button>
   </form>
 
+  <!-- Markdown (marked) + Sanitizer (DOMPurify) -->
+  https://cdn.jsdelivr.net/npm/marked/marked.min.js
+  https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js
+
 <script>
 (() => {
   /* -------- Parámetros -------- */
@@ -109,9 +136,10 @@
   const APIURL   = "/api/siri-gpt";
   const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
 
-  // Acepta u= o q= para el primer turno; a= para la primera respuesta
-  const INIT_U   = qs.get("u") || qs.get("q") || "";
-  const INIT_A   = qs.get("a") || "";
+  // Caso 2: u (o q) = tu pregunta, a = respuesta ya hablada
+  const INIT_U   = (qs.get("u") || qs.get("q") || "").trim();
+  const INIT_A   = (qs.get("a") || "").trim();
+
   const TITLE    = qs.get("title") || "Grooky";
   const SPEED    = Math.max(1, parseInt(qs.get("speed") || "18", 10));
   const CHUNK    = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
@@ -135,25 +163,34 @@
   let history = loadHistory(); // incluye [system]
   renderAll();
 
-  // Sembrado del primer par (si u/a vienen por la URL)
+  // Sembrado del primer par (si viene por URL)
   (async () => {
-    if (INIT_U.trim() && INIT_A.trim()) {
-      // pinta tu mensaje y guarda
-      addUser(INIT_U.trim());
-      // typing de la primera respuesta y guarda
-      const typingEl = startTypingSkeleton(Date.now());
-      await typewrite(typingEl, INIT_A.trim(), SPEED, CHUNK);
-      typingEl.classList.remove("typing");
-      typingEl.textContent = INIT_A.trim();
-      history.push({ role:"assistant", content: INIT_A.trim(), ts: Date.now() });
-      saveHistory();
-    } else if (INIT_U.trim()) {
-      // si solo viene la pregunta, la enviamos al backend
-      $input.value = INIT_U.trim();
+    if (INIT_U && INIT_A) {
+      // Si ya está al final ese mismo par, no lo repito (evita duplicados al reabrir)
+      const already = endsWithPair(INIT_U, INIT_A);
+      if (!already) {
+        addUser(INIT_U); // pinta y guarda
+        // typing plano para no romper etiquetas; al final, renderizo Markdown
+        const typingEl = startTypingSkeleton(Date.now());
+        await typewrite(typingEl, stripMd(INIT_A), SPEED, CHUNK);
+        typingEl.classList.remove("typing");
+        typingEl.innerHTML = renderMarkdown(INIT_A);
+        history.push({ role:"assistant", content: INIT_A, ts: Date.now() });
+        saveHistory();
+      }
+    } else if (INIT_U) {
+      $input.value = INIT_U;
       autoResize();
       submitMessage();
     }
   })();
+
+  function endsWithPair(u, a){
+    if (history.length < 3) return false;
+    const last2 = history.slice(-2);
+    return last2[0].role === "user" && last2[0].content === u &&
+           last2[1].role === "assistant" && last2[1].content === a;
+  }
 
   /* -------- Eventos -------- */
   $form.addEventListener("submit", (e) => { e.preventDefault(); submitMessage(); });
@@ -197,8 +234,30 @@
   }
 
   /* -------- Utilidades de formato -------- */
-  const fmt2 = n => (n<10 ? "0"+n : ""+n);
-  function fmtTime(ts){ const d = new Date(ts || Date.now()); return `${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`; }
+  const z2 = n => (n<10 ? "0"+n : ""+n);
+  const fmtTime = ts => { const d = new Date(ts||Date.now()); return `${z2(d.getHours())}:${z2(d.getMinutes())}`; };
+
+  // Markdown seguro
+  function renderMarkdown(md){
+    try {
+      const html = marked.parse(md ?? "");
+      return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    } catch { return escapeHTML(md ?? ""); }
+  }
+  // texto plano para typing (evita cortar etiquetas)
+  function stripMd(md=""){
+    return md
+      .replace(/```[\s\S]*?```/g, s => s.replace(/```/g,""))
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/__([^_]+)__/g, "$1")
+      .replace(/_([^_]+)_/g, "$1")
+      .replace(/!\\[[^\\]]*\]\\([^)]*\\)/g, "")
+      .replace(/\\[([^\\]]+)\]\\(([^)]+)\\)/g, "$1")
+      .replace(/^\s*[-*+]\s+/gm, "• ")
+      .trim();
+  }
 
   /* -------- Render / Historial -------- */
   function loadHistory() {
@@ -208,36 +267,41 @@
   }
   function saveHistory() { try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {} }
 
-  function renderRow(role, content, ts){
+  function renderRow(role, content, ts, {markdown=false} = {}){
     const row = document.createElement("div");
     row.className = "msg " + (role === "user" ? "user" : "assistant");
+    const html = markdown ? renderMarkdown(content) : escapeHTML(content);
     row.innerHTML = `
-      <div class="bubble">
-        <div class="who">${role === "user" ? "Tú" : "Grooky"}</div>
-        <div class="text">${escapeHTML(content)}</div>
-        <div class="meta">${fmtTime(ts)}</div>
-      </div>`;
+      
+        ${role === "user" ? "Tú" : "Grooky"}
+        ${html}
+        ${fmtTime(ts)}
+      `;
     $chat.appendChild(row);
-    $chat.scrollTo({ top: $chat.scrollHeight });
+    $chat.scrollTo({ top: $chat.scrollHeight, behavior:"smooth" });
     return row;
   }
+
   function addUser(text, ts = Date.now()) {
-    renderRow("user", text, ts);
+    renderRow("user", text, ts, { markdown:false });
     history.push({ role:"user", content:text, ts });
     saveHistory();
   }
+
   function addAssistant(text, ts = Date.now()) {
-    renderRow("assistant", text, ts);
+    renderRow("assistant", text, ts, { markdown:true });
     history.push({ role:"assistant", content:text, ts });
     saveHistory();
   }
+
   function renderAll(){
     $chat.innerHTML = "";
     for (const m of history) {
       if (m.role === "system") continue;
-      renderRow(m.role, m.content, m.ts);
+      renderRow(m.role, m.content, m.ts, { markdown: m.role === "assistant" });
     }
   }
+
   function startTypingSkeleton(ts){
     const row = document.createElement("div");
     row.className = "msg assistant";
@@ -248,7 +312,7 @@
     bubble.appendChild(who); bubble.appendChild(text); bubble.appendChild(meta);
     row.appendChild(bubble); $chat.appendChild(row);
     $chat.scrollTo({ top: $chat.scrollHeight });
-    return text;
+    return text; // contenedor único para este turno
   }
 
   /* -------- Backend (turnos siguientes) -------- */
@@ -275,9 +339,9 @@
       if (!r.ok) throw new Error(data?.error || "Error de API");
 
       const reply = String(data.response || "");
-      await typewrite(typingEl, reply, SPEED, CHUNK);
+      await typewrite(typingEl, stripMd(reply), SPEED, CHUNK);
       typingEl.classList.remove("typing");
-      typingEl.textContent = reply;
+      typingEl.innerHTML = renderMarkdown(reply);
 
       history.push({ role:"assistant", content: reply, ts: Date.now() });
       saveHistory();
@@ -308,7 +372,12 @@
   }
   function disable(b) { $send.disabled = b; $input.disabled = b; $mic.disabled = b; }
   function autoResize(){ $input.style.height = "auto"; $input.style.height = Math.min(120, $input.scrollHeight) + "px"; }
-  function showToast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
+  function showToast(msg){
+    const t = document.createElement("div");
+    t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 1800);
+  }
 
   /* -------- Grooky canvas: ondas amarillo + verde‑azul -------- */
   const cv = document.getElementById("grookyCanvas");
