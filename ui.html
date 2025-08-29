@@ -19,9 +19,7 @@
     display:flex; align-items:center; gap:12px; padding:10px 14px;
     border-bottom:1px solid #1b1b21; position:sticky; top:0; background:#0b0b0d; z-index:2;
   }
-  .brand{
-    display:flex; align-items:center; gap:10px;
-  }
+  .brand{ display:flex; align-items:center; gap:10px; }
   #grookyCanvas{
     width:30px; height:30px; border-radius:50%;
     box-shadow: 0 0 18px rgba(255,212,79,.25), 0 0 18px rgba(0,216,167,.18);
@@ -29,19 +27,26 @@
   h1{ font-size:16px; margin:0; color:#dcdce4; letter-spacing:.2px }
 
   /* Chat */
-  main{ flex:1; overflow:auto; padding:14px; }
+  main{ flex:1; overflow:auto; padding:12px; }
   .msg{
-    max-width:860px; margin:0 auto 10px auto; display:flex;
+    max-width:860px; margin:0 auto 8px auto; display:flex; flex-direction:column;
   }
   .bubble{
     background:#121217; border:1px solid #23232a; border-radius:12px;
-    padding:10px 12px; line-height:1.45; white-space:pre-wrap; word-break:break-word;
+    padding:8px 12px; line-height:1.42; white-space:pre-wrap; word-break:break-word;
   }
-  .user .bubble{ background:#0f1e27; border-color:#193545 }
-  .assistant .bubble{ background:#14141b; border-color:#23232a }
+  /* Usuario a todo el ancho del hilo */
+  .msg.user .bubble{ background:#0f1e27; border-color:#193545; width:100%; }
+  .msg.assistant .bubble{ background:#14141b; border-color:#23232a; max-width:100%; }
   .who{
     font-size:11px; color:#98a0ae; margin:0 0 2px 2px; line-height:1;
   }
+  .text{ /* contenedor del contenido de mensaje */ }
+  .meta{
+    display:flex; justify-content:flex-end; gap:8px;
+    font-size:10.5px; color:#8b93a3; margin-top:4px; opacity:.9;
+  }
+
   .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
   @keyframes caret { 50% { border-color: transparent; } }
 
@@ -79,7 +84,7 @@
 <body>
   <header>
     <div class="brand">
-      <!-- Orbe Grooky: canvas con ondas en amarillo + verde-azul -->
+      <!-- Orbe Grooky: ondas amarillo + verde‑azul -->
       <canvas id="grookyCanvas" width="60" height="60" aria-hidden="true"></canvas>
       <h1 id="title">Grooky</h1>
     </div>
@@ -104,10 +109,10 @@
 (() => {
   // ---------- Parámetros ----------
   const qs       = new URLSearchParams(location.search);
-  const APIURL   = "/api/siri-gpt"; // mismo dominio (Vercel)
+  const APIURL   = "/api/siri-gpt"; // mismo dominio
   const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
 
-  // Caso 2 (sembrado): u = pregunta (usuario), a = respuesta (assistant) ya calculada por el Atajo
+  // Caso 2: sembrar primer turno resuelto
   const INIT_U   = qs.get("u") || ""; // user
   const INIT_A   = qs.get("a") || ""; // assistant
   const TITLE    = qs.get("title") || "Grooky";
@@ -130,19 +135,18 @@
   let history = loadHistory(); // incluye prompt de sistema [0]
   renderAll();
 
-  // Sembrado (con efecto typing en la primera respuesta):
-  // - Si vienen u y a → pintamos user y hacemos typewriter de a, luego persistimos.
-  // - Si solo u → lo enviamos al backend.
+  // Sembrado: escribir con typing la primera respuesta (y guardar con timestamp)
   (async () => {
     if (INIT_U.trim() && INIT_A.trim()) {
-      addUser(INIT_U.trim(), /*renderOnly*/true); // para que aparezca ya en UI
-      const el = startTypingSkeleton();           // esqueleto typing de la primera respuesta
+      const now = Date.now();
+      renderRow("user", INIT_U.trim(), now);
+      const el = startTypingSkeleton();               // devolverá un elemento único (sin id global)
       await typewrite(el, INIT_A.trim(), SPEED, CHUNK);
       el.classList.remove("typing");
       el.textContent = INIT_A.trim();
-      // Persistimos ambos en history después de tipar para que quede guardado
-      history.push({ role: "user", content: INIT_U.trim() });
-      history.push({ role: "assistant", content: INIT_A.trim() });
+
+      history.push({ role:"user", content: INIT_U.trim(), ts: now });
+      history.push({ role:"assistant", content: INIT_A.trim(), ts: Date.now() });
       saveHistory();
     } else if (INIT_U.trim()) {
       $input.value = INIT_U.trim();
@@ -193,7 +197,7 @@
         $mic.classList.remove("rec");
         $input.value = finalText.trim() || $input.value.trim();
         autoResize();
-        // Auto‑enviar al terminar de dictar (si lo prefieres, descomenta):
+        // Auto‑enviar al terminar de dictar (opcional):
         // if ($input.value.trim()) submitMessage();
       };
 
@@ -203,60 +207,76 @@
     }
   }
 
+  // ---------- Utilidades de formato ----------
+  const fmt2 = n => (n<10 ? "0"+n : ""+n);
+  function fmtTime(ts){
+    const d = new Date(ts || Date.now());
+    return `${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`;
+  }
+
   // ---------- UI / Historial ----------
   function loadHistory() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    return [{ role: "system", content: "Eres un asistente útil y conciso." }];
+    return [{ role: "system", content: "Eres un asistente útil y conciso.", ts: Date.now() }];
   }
   function saveHistory() {
     try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {}
   }
 
-  function renderRow(role, content){
+  function renderRow(role, content, ts){
     const row = document.createElement("div");
     row.className = "msg " + (role === "user" ? "user" : "assistant");
+    const time = fmtTime(ts);
     row.innerHTML = `
       <div class="bubble">
         <div class="who">${role === "user" ? "Tú" : "Grooky"}</div>
-        <div>${escapeHTML(content)}</div>
+        <div class="text">${escapeHTML(content)}</div>
+        <div class="meta">${time}</div>
       </div>`;
     $chat.appendChild(row);
     $chat.scrollTo({ top: $chat.scrollHeight });
     return row;
   }
-  function addUser(text, renderOnly=false) {
-    renderRow("user", text);
-    if (!renderOnly) {
-      history.push({ role: "user", content: text });
-      saveHistory();
-    }
+  function addUser(text) {
+    const ts = Date.now();
+    renderRow("user", text, ts);
+    history.push({ role: "user", content: text, ts });
+    saveHistory();
   }
   function addAssistant(text) {
-    renderRow("assistant", text);
-    history.push({ role: "assistant", content: text });
+    const ts = Date.now();
+    renderRow("assistant", text, ts);
+    history.push({ role: "assistant", content: text, ts });
     saveHistory();
   }
   function renderAll(){
     $chat.innerHTML = "";
     for (const msg of history) {
       if (msg.role === "system") continue;
-      renderRow(msg.role, msg.content);
+      renderRow(msg.role, msg.content, msg.ts);
     }
   }
   function startTypingSkeleton() {
+    // Crea burbuja de Grooky + contenedor de texto con clase 'typing' y devuelve ese elemento,
+    // para no usar ids globales (evita sobrescribir mensajes anteriores).
     const row = document.createElement("div");
     row.className = "msg assistant";
-    row.innerHTML = `
-      <div class="bubble">
-        <div class="who">Grooky</div>
-        <div id="typing" class="typing"></div>
-      </div>`;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    const who = document.createElement("div");
+    who.className = "who"; who.textContent = "Grooky";
+    const text = document.createElement("div");
+    text.className = "text typing"; // ← este es el que devolvemos
+    const meta = document.createElement("div");
+    meta.className = "meta"; meta.textContent = fmtTime(Date.now());
+    bubble.appendChild(who); bubble.appendChild(text); bubble.appendChild(meta);
+    row.appendChild(bubble);
     $chat.appendChild(row);
     $chat.scrollTo({ top: $chat.scrollHeight });
-    return document.getElementById("typing");
+    return text; // elemento único
   }
 
   // ---------- Backend (turnos siguientes) ----------
@@ -267,7 +287,7 @@
     autoResize();
 
     addUser(text);
-    const el = startTypingSkeleton();
+    const typingEl = startTypingSkeleton();
     disable(true);
 
     try {
@@ -281,22 +301,22 @@
       if (!r.ok) throw new Error(data?.error || "Error de API");
       const reply = String(data.response || "");
 
-      await typewrite(el, reply, SPEED, CHUNK);
-      el.classList.remove("typing");
-      el.textContent = reply;
+      await typewrite(typingEl, reply, SPEED, CHUNK);
+      typingEl.classList.remove("typing");
+      typingEl.textContent = reply;
 
-      history.push({ role:"assistant", content: reply });
+      history.push({ role:"assistant", content: reply, ts: Date.now() });
       saveHistory();
 
     } catch (err) {
-      el.classList.remove("typing");
-      el.textContent = "⚠️ " + (err?.message || "Fallo inesperado");
+      typingEl.classList.remove("typing");
+      typingEl.textContent = "⚠️ " + (err?.message || "Fallo inesperado");
     } finally {
       disable(false);
     }
   }
 
-  // ---------- Utilidades ----------
+  // ---------- Funciones comunes ----------
   function typewrite(targetEl, text, speed, chunk) {
     return new Promise(resolve => {
       let i = 0;
@@ -347,15 +367,15 @@
 
     // Fondo suave
     const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W/2);
-    bg.addColorStop(0, "rgba(255,213,79,0.15)");
-    bg.addColorStop(1, "rgba(0,216,167,0.10)");
+    bg.addColorStop(0, "rgba(255,213,79,0.15)");  // amarillo
+    bg.addColorStop(1, "rgba(0,216,167,0.10)");   // verde‑azul
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,W,H);
 
     // Onda 1 (amarillo)
-    wave("#FFD54F", 1.5, 0.020, 8, t*1.1);
+    wave("#FFD54F", 1.6, 0.020, t*1.1);
     // Onda 2 (verde‑azul)
-    wave("#00D8A7", 1.3, 0.024, 10, t*1.3 + 2);
+    wave("#00D8A7", 1.3, 0.024, t*1.35 + 2.0);
 
     ctx.restore();
 
@@ -367,13 +387,13 @@
     t += 0.03;
     requestAnimationFrame(draw);
   }
-  function wave(color, amp, freq, speed, phase){
+  function wave(color, amp, freq, phase){
     ctx.beginPath();
     for (let x=0; x<=W; x++){
-      const y = H/2 + Math.sin(x*freq + phase) * (H/10)*amp
-                        + Math.sin(x*freq*0.5 + phase*0.7) * (H/20);
-      if (x===0) ctx.moveTo(x,y);
-      else ctx.lineTo(x,y);
+      const y = H/2
+        + Math.sin(x*freq + phase) * (H/10)*amp
+        + Math.sin(x*freq*0.5 + phase*0.7) * (H/20);
+      x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     }
     ctx.lineWidth = 2;
     ctx.strokeStyle = color;
