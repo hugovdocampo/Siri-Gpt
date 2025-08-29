@@ -186,6 +186,17 @@ button {
   color: var(--text);
 }
 
+#grookyCanvas{
+  width: 28px;
+  height: 28px;
+  max-width: 32px;   /* ← evita que crezca por layouts raros */
+  max-height: 32px;  /* ← evita que crezca por layouts raros */
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(255,212,79,.25), 0 0 18px rgba(0,216,167,.18);
+  flex: 0 0 auto;
+}
+
+
 .btn-mic.rec { background: #5e2345; border-color: #823157; }
 
 /* -------------------------- */
