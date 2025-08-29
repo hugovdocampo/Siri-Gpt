@@ -44,8 +44,15 @@ const chunk = parseIntClamped(qs.get('chunk'), 2, 1, 32);   // chars por tick
 const reset = qs.get('reset') === '1';
 const voice = (qs.get('voice') || 'es-ES').trim();
 
-// Primer mensaje
-const seed = (qs.get('seed') || '').trim();
-
-export const config = { id, title, model, speed, chunk, reset, voice, u, a, seed };
+export const config = {
+  id,
+  title,
+  model,
+  speed,
+  chunk,
+  reset,
+  voice,
+  u,
+  a
+};
 
