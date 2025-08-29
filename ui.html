@@ -1,423 +1,65 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<meta name="color-scheme" content="dark light" />
-<title>Grooky</title>
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  html, body { height:100% }
-  body{
-    margin:0; background:#0b0b0d; color:#e8e8ea;
-    font-family:-apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    display:flex; flex-direction:column; min-height:100%;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+  />
+  <meta name="color-scheme" content="dark light" />
+  <title>Grooky</title>
 
-  /* Header */
-  header{
-    display:flex; align-items:center; gap:12px; padding:10px 14px;
-    border-bottom:1px solid #1b1b21; position:sticky; top:0; background:#0b0b0d; z-index:2;
-  }
-  .brand{ display:flex; align-items:center; gap:10px; }
-  #grookyCanvas{
-    width:30px; height:30px; border-radius:50%;
-    box-shadow: 0 0 18px rgba(255,212,79,.25), 0 0 18px rgba(0,216,167,.18);
-    flex:0 0 auto;
-  }
-  h1{ font-size:16px; margin:0; color:#dcdce4; letter-spacing:.2px }
+  <!-- CSS (separado en 3 capas) -->
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/chat.css">
+  <link rel="stylesheet" href="/css/theme.css">
 
-  /* Chat (safe-areas) */
-  main{
-    flex:1; overflow:auto;
-    padding:12px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
-  }
-  .msg{
-    width:min(900px, calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 24px));
-    margin:0 auto 8px auto;
-    display:flex; flex-direction:column;
-  }
-
-  /* Burbuja con layout en grid: título (quién), texto y meta (hora) */
-  .bubble{
-    display:grid; grid-template-rows:auto 1fr auto;
-    background:#121217; border:1px solid #23232a; border-radius:12px;
-    padding:8px 12px; line-height:1.42;
-    white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; max-width:100%;
-  }
-  .msg.user .bubble{ background:#0f1e27; border-color:#193545; width:100%; }
-  .msg.assistant .bubble{ background:#14141b; border-color:#23232a; width:100%; }
-
-  .who{
-    font-size:11px; color:#98a0ae; margin:0 0 2px 2px; line-height:1;
-  }
-  .text{ margin:0; }
-  .text p { margin:.45em 0; }
-  .meta{
-    display:flex; justify-content:flex-end; align-items:center;
-    font-size:10.5px; color:#8b93a3; margin-top:4px; padding-right:2px; opacity:.9;
-    white-space:nowrap;
-  }
-
-  .typing { border-right:1px solid #79c0ff; animation: caret 1s steps(1) infinite; }
-  @keyframes caret { 50% { border-color: transparent; } }
-
-  /* Markdown (Grooky) */
-  .text code, .text pre { background:#191922; border:1px solid #2a2a32; border-radius:6px; }
-  .text code { padding:.15em .35em; }
-  .text pre { padding:.6em .8em; overflow:auto; }
-  .text table { width:100%; border-collapse:collapse; display:block; overflow-x:auto; }
-  .text th, .text td { border:1px solid #2a2a32; padding:6px 8px; text-align:left; }
-  .text blockquote { border-left:3px solid #2a2a32; margin:.4em 0; padding:.2em .8em; color:#b8bfcd; }
-
-  /* Composer */
-  form{
-    display:flex; gap:8px; padding:10px; border-top:1px solid #1b1b21;
-    background:#0b0b0d; position:sticky; bottom:0;
-    padding-left: max(10px, env(safe-area-inset-left));
-    padding-right:max(10px, env(safe-area-inset-right));
-  }
-  textarea{
-    flex:1; resize:none; min-height:38px; max-height:120px; padding:9px 11px; border-radius:11px;
-    border:1px solid #23232a; background:#121217; color:#e8e8ea; outline:none;
-  }
-  button{
-    background:#26262f; color:#e8e8ea; border:1px solid #353542; border-radius:11px; padding:9px 12px; min-width:44px;
-  }
-  #mic{ min-width:44px; padding:8px; display:grid; place-items:center; }
-  #mic.rec{ background:#5e2345; border-color:#823157; }
-  #mic svg{ width:18px; height:18px; opacity:.9 }
-
-  /* Toast */
-  .toast{
-    position:fixed; left:50%; transform:translateX(-50%);
-    bottom:18px; background:#1a1a1f; border:1px solid #2a2a32;
-    color:#ddd; padding:8px 12px; border-radius:10px; font-size:14px;
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    .typing{ animation:none; border-right:none }
-  }
-</style>
+  <!-- Metadatos básicos de seguridad para navegadores -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta name="referrer" content="no-referrer" />
 </head>
+
 <body>
-  <header>
-    <div class="brand">
+  <!-- Header / Marca -->
+  <header class="app-header" role="banner">
+    <div class="brand" aria-label="Identidad de Grooky">
+      <!-- Orbe animado (lo dibuja /js/ui/orb.js) -->
       <canvas id="grookyCanvas" width="60" height="60" aria-hidden="true"></canvas>
       <h1 id="title">Grooky</h1>
     </div>
   </header>
 
-  <main id="chat" aria-live="polite"></main>
+  <!-- Timeline de chat -->
+  <main id="chat" aria-live="polite" aria-label="Historial de conversación"></main>
 
-  <form id="form" autocomplete="off">
-    <!-- Mic minimal con SVG -->
-    <button id="mic" type="button" title="Dictar" aria-label="Dictar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#e8e8ea" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Composer -->
+  <form id="form" class="composer" autocomplete="off" aria-label="Enviar mensaje a Grooky">
+    <!-- Mic minimal (el comportamiento lo gestiona /js/mic/speech.js) -->
+    <button id="mic" type="button" class="btn-mic" title="Dictar" aria-label="Dictar">
+      <!-- SVG ligero (accesible con stroke actual) -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true" focusable="false">
         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/>
         <path d="M19 10a7 7 0 0 1-14 0"/>
         <path d="M12 17v4"/>
       </svg>
     </button>
-    <textarea id="input" placeholder="Escribe o dicta…" rows="1"></textarea>
-    <button id="send" type="submit" title="Enviar" aria-label="Enviar">Enviar</button>
+
+    <textarea
+      id="input"
+      class="composer-input"
+      placeholder="Escribe o dicta…"
+      rows="1"
+      aria-label="Mensaje"
+    ></textarea>
+
+    <button id="send" type="submit" class="btn-send" title="Enviar" aria-label="Enviar">
+      Enviar
+    </button>
   </form>
 
-  <!-- Markdown (marked) + Sanitizer (DOMPurify) -->
-  https://cdn.jsdelivr.net/npm/marked/marked.min.js
-  https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js
-
-<script>
-(() => {
-  /* -------- Parámetros -------- */
-  const qs       = new URLSearchParams(location.search);
-  const APIURL   = "/api/siri-gpt";
-  const MODEL    = qs.get("model") || "llama-3.3-70b-versatile";
-
-  // Caso 2: u (o q) = tu pregunta, a = respuesta ya hablada
-  const INIT_U   = (qs.get("u") || qs.get("q") || "").trim();
-  const INIT_A   = (qs.get("a") || "").trim();
-
-  const TITLE    = qs.get("title") || "Grooky";
-  const SPEED    = Math.max(1, parseInt(qs.get("speed") || "18", 10));
-  const CHUNK    = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
-  const THREAD   = qs.get("id") || ("t_" + Math.random().toString(36).slice(2,10));
-  const RESET    = qs.get("reset") === "1";
-  const VOICE_L  = qs.get("voice") || "es-ES";
-
-  document.getElementById("title").textContent = TITLE;
-
-  /* -------- DOM -------- */
-  const $chat  = document.getElementById("chat");
-  const $form  = document.getElementById("form");
-  const $input = document.getElementById("input");
-  const $send  = document.getElementById("send");
-  const $mic   = document.getElementById("mic");
-
-  /* -------- Historial -------- */
-  const KEY = "siri_ui_chat_" + THREAD;
-  if (RESET) localStorage.removeItem(KEY);
-
-  let history = loadHistory(); // incluye [system]
-  renderAll();
-
-  // Sembrado del primer par (si viene por URL)
-  (async () => {
-    if (INIT_U && INIT_A) {
-      // Si ya está al final ese mismo par, no lo repito (evita duplicados al reabrir)
-      const already = endsWithPair(INIT_U, INIT_A);
-      if (!already) {
-        addUser(INIT_U); // pinta y guarda
-        // typing plano para no romper etiquetas; al final, renderizo Markdown
-        const typingEl = startTypingSkeleton(Date.now());
-        await typewrite(typingEl, stripMd(INIT_A), SPEED, CHUNK);
-        typingEl.classList.remove("typing");
-        typingEl.innerHTML = renderMarkdown(INIT_A);
-        history.push({ role:"assistant", content: INIT_A, ts: Date.now() });
-        saveHistory();
-      }
-    } else if (INIT_U) {
-      $input.value = INIT_U;
-      autoResize();
-      submitMessage();
-    }
-  })();
-
-  function endsWithPair(u, a){
-    if (history.length < 3) return false;
-    const last2 = history.slice(-2);
-    return last2[0].role === "user" && last2[0].content === u &&
-           last2[1].role === "assistant" && last2[1].content === a;
-  }
-
-  /* -------- Eventos -------- */
-  $form.addEventListener("submit", (e) => { e.preventDefault(); submitMessage(); });
-  $input.addEventListener("input", autoResize);
-
-  // Mic minimal con fallback
-  const supportsSR = "webkitSpeechRecognition" in window;
-  if (!supportsSR) {
-    $mic.addEventListener("click", () => {
-      showToast("Dictado no disponible aquí. Abriendo en Safari…");
-      const a = document.createElement("a");
-      a.href = location.href; a.target = "_blank"; a.rel="noopener"; a.click();
-    });
-  } else {
-    let rec;
-    try { rec = new webkitSpeechRecognition(); } catch {}
-    if (rec) {
-      rec.lang = VOICE_L; rec.continuous = false; rec.interimResults = true;
-      let finalText = "";
-      rec.onstart  = () => { $mic.classList.add("rec"); showToast("Escuchando…"); };
-      rec.onresult = (e) => {
-        let interim = "";
-        for (let i=0; i<e.results.length; i++){
-          const r = e.results[i];
-          if (r.isFinal) finalText += r[0].transcript;
-          else interim += r[0].transcript;
-        }
-        $input.value = (finalText + interim).trim();
-        autoResize();
-      };
-      rec.onerror = () => { $mic.classList.remove("rec"); showToast("No se pudo usar el dictado"); };
-      rec.onend   = () => {
-        $mic.classList.remove("rec");
-        $input.value = finalText.trim() || $input.value.trim();
-        autoResize();
-        // Auto‑enviar tras dictado (opcional):
-        // if ($input.value.trim()) submitMessage();
-      };
-      $mic.addEventListener("click", () => { try { finalText = ""; rec.start(); } catch {} });
-    }
-  }
-
-  /* -------- Utilidades de formato -------- */
-  const z2 = n => (n<10 ? "0"+n : ""+n);
-  const fmtTime = ts => { const d = new Date(ts||Date.now()); return `${z2(d.getHours())}:${z2(d.getMinutes())}`; };
-
-  // Markdown seguro
-  function renderMarkdown(md){
-    try {
-      const html = marked.parse(md ?? "");
-      return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-    } catch { return escapeHTML(md ?? ""); }
-  }
-  // texto plano para typing (evita cortar etiquetas)
-  function stripMd(md=""){
-    return md
-      .replace(/```[\s\S]*?```/g, s => s.replace(/```/g,""))
-      .replace(/`([^`]+)`/g, "$1")
-      .replace(/\*\*([^*]+)\*\*/g, "$1")
-      .replace(/\*([^*]+)\*/g, "$1")
-      .replace(/__([^_]+)__/g, "$1")
-      .replace(/_([^_]+)_/g, "$1")
-      .replace(/!\\[[^\\]]*\]\\([^)]*\\)/g, "")
-      .replace(/\\[([^\\]]+)\]\\(([^)]+)\\)/g, "$1")
-      .replace(/^\s*[-*+]\s+/gm, "• ")
-      .trim();
-  }
-
-  /* -------- Render / Historial -------- */
-  function loadHistory() {
-    try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); }
-    catch {}
-    return [{ role:"system", content:"Eres un asistente útil y conciso.", ts: Date.now() }];
-  }
-  function saveHistory() { try { localStorage.setItem(KEY, JSON.stringify(history)); } catch {} }
-
-  function renderRow(role, content, ts, {markdown=false} = {}){
-    const row = document.createElement("div");
-    row.className = "msg " + (role === "user" ? "user" : "assistant");
-    const html = markdown ? renderMarkdown(content) : escapeHTML(content);
-    row.innerHTML = `
-      
-        ${role === "user" ? "Tú" : "Grooky"}
-        ${html}
-        ${fmtTime(ts)}
-      `;
-    $chat.appendChild(row);
-    $chat.scrollTo({ top: $chat.scrollHeight, behavior:"smooth" });
-    return row;
-  }
-
-  function addUser(text, ts = Date.now()) {
-    renderRow("user", text, ts, { markdown:false });
-    history.push({ role:"user", content:text, ts });
-    saveHistory();
-  }
-
-  function addAssistant(text, ts = Date.now()) {
-    renderRow("assistant", text, ts, { markdown:true });
-    history.push({ role:"assistant", content:text, ts });
-    saveHistory();
-  }
-
-  function renderAll(){
-    $chat.innerHTML = "";
-    for (const m of history) {
-      if (m.role === "system") continue;
-      renderRow(m.role, m.content, m.ts, { markdown: m.role === "assistant" });
-    }
-  }
-
-  function startTypingSkeleton(ts){
-    const row = document.createElement("div");
-    row.className = "msg assistant";
-    const bubble = document.createElement("div"); bubble.className = "bubble";
-    const who = document.createElement("div"); who.className = "who"; who.textContent = "Grooky";
-    const text = document.createElement("div"); text.className = "text typing";
-    const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = fmtTime(ts);
-    bubble.appendChild(who); bubble.appendChild(text); bubble.appendChild(meta);
-    row.appendChild(bubble); $chat.appendChild(row);
-    $chat.scrollTo({ top: $chat.scrollHeight });
-    return text; // contenedor único para este turno
-  }
-
-  /* -------- Backend (turnos siguientes) -------- */
-  async function submitMessage() {
-    const text = ($input.value || "").trim();
-    if (!text) return;
-    $input.value = ""; autoResize();
-
-    addUser(text);
-    const typingEl = startTypingSkeleton(Date.now());
-    disable(true);
-
-    try {
-      // Sanitiza: solo {role, content}
-      const msgs = history.map(m => ({ role: m.role, content: m.content }));
-      const payload = { model: MODEL, messages: msgs };
-
-      const r = await fetch(APIURL, {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Error de API");
-
-      const reply = String(data.response || "");
-      await typewrite(typingEl, stripMd(reply), SPEED, CHUNK);
-      typingEl.classList.remove("typing");
-      typingEl.innerHTML = renderMarkdown(reply);
-
-      history.push({ role:"assistant", content: reply, ts: Date.now() });
-      saveHistory();
-
-    } catch (err) {
-      typingEl.classList.remove("typing");
-      typingEl.textContent = "⚠️ " + (err?.message || "Fallo inesperado");
-    } finally {
-      disable(false);
-    }
-  }
-
-  /* -------- Comunes -------- */
-  function typewrite(targetEl, text, speed, chunk) {
-    return new Promise(resolve => {
-      let i = 0;
-      const step = () => {
-        if (i >= text.length) return resolve();
-        targetEl.textContent += text.slice(i, i + chunk);
-        i += chunk;
-        setTimeout(step, speed);
-      };
-      step();
-    });
-  }
-  function escapeHTML(s="") {
-    return s.replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
-  }
-  function disable(b) { $send.disabled = b; $input.disabled = b; $mic.disabled = b; }
-  function autoResize(){ $input.style.height = "auto"; $input.style.height = Math.min(120, $input.scrollHeight) + "px"; }
-  function showToast(msg){
-    const t = document.createElement("div");
-    t.className = "toast"; t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 1800);
-  }
-
-  /* -------- Grooky canvas: ondas amarillo + verde‑azul -------- */
-  const cv = document.getElementById("grookyCanvas");
-  const ctx = cv.getContext("2d");
-  const DPR = Math.max(1, window.devicePixelRatio || 1);
-  const W = 60, H = 60;
-  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
-
-  let t = 0;
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    ctx.save();
-    ctx.beginPath(); ctx.arc(W/2, H/2, W/2, 0, Math.PI*2); ctx.clip();
-
-    const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W/2);
-    bg.addColorStop(0, "rgba(255,213,79,0.15)");
-    bg.addColorStop(1, "rgba(0,216,167,0.10)");
-    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
-
-    wave("#FFD54F", 1.6, 0.020, t*1.1);
-    wave("#00D8A7", 1.3, 0.024, t*1.35 + 2.0);
-
-    ctx.restore();
-    ctx.strokeStyle = "rgba(255,213,79,0.35)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(W/2, H/2, W/2-0.5, 0, Math.PI*2); ctx.stroke();
-
-    t += 0.03; requestAnimationFrame(draw);
-  }
-  function wave(color, amp, freq, phase){
-    ctx.beginPath();
-    for (let x=0; x<=W; x++){
-      const y = H/2
-        + Math.sin(x*freq + phase) * (H/10)*amp
-        + Math.sin(x*freq*0.5 + phase*0.7) * (H/20);
-      x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-    }
-    ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke();
-  }
-  draw();
-})();
-</script>
+  <!-- Entry point (ESM). Orquesta: config, seeder u/a, typing, markdown, mic, API, historial, orb. -->
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>
