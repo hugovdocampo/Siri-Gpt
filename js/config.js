@@ -24,10 +24,37 @@ function safeParam(qs, key, def = '') {
 }
 
 const qs = new URLSearchParams(location.search);
+// Lee también parámetros del hash (#u_b64=...&a_b64=...)
+const hash = location.hash.startsWith('#') ? location.hash.slice(1) : '';
+const hsp  = new URLSearchParams(hash);
+
+// Decodificador Base64 → UTF-8 (seguro)
+function b64ToUtf8(b64) {
+  try {
+    if (window.TextDecoder) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array([...bin].map(ch => ch.charCodeAt(0)));
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+  } catch {}
+
+  try {
+    // Fallback universal
+    return decodeURIComponent(
+      Array.prototype.map.call(atob(b64), c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join('')
+    );
+  } catch {
+    return '';
+  }
+}
 
 // Sembrado del primer turno (caso 2)
-const u = (safeParam(qs, 'u') || safeParam(qs, 'q') || '').trim();
-const a = safeParam(qs, 'a', '').trim();
+const uFromHash = hsp.get('u_b64') ? b64ToUtf8(hsp.get('u_b64')) : '';
+const aFromHash = hsp.get('a_b64') ? b64ToUtf8(hsp.get('a_b64')) : '';
+const u = (uFromHash || safeParam(qs, 'u') || safeParam(qs, 'q') || '').trim();
+const a = (aFromHash || safeParam(qs, 'a', '')).trim();
 
 // Identidad del hilo
 const id = (qs.get('id') || `t_${Math.random().toString(36).slice(2, 10)}`).trim();
