@@ -146,7 +146,8 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberat
 
 /* Composer */
 .composer {
-  position: sticky;
+  position: fixed;
+  width: 100%;
   bottom: 0;
   display: flex;
   align-items: flex-end;
