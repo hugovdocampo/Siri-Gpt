@@ -16,7 +16,6 @@ await md.ensureMarkdownReady();
 import { toast } from './ui/toast.js';
 import { initOrb } from './ui/orb.js';
 
-import * as md from './markdown/markdown.js';
 import { initSpeech } from './mic/speech.js';
 
 console.log('[Grooky] app.js cargado', new Date().toISOString());
