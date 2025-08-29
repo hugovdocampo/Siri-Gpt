@@ -15,6 +15,8 @@ import { initOrb } from './ui/orb.js';
 import * as md from './markdown/markdown.js';
 import { initSpeech } from './mic/speech.js';
 
+console.log('[Grooky] app.js cargado', new Date().toISOString());
+
 (async function main() {
   // ---------- DOM refs ----------
   const $title = /** @type {HTMLHeadingElement} */ (document.getElementById('title'));
