@@ -194,6 +194,7 @@ button {
   border-radius: 50%;
   box-shadow: 0 0 18px rgba(255,212,79,.25), 0 0 18px rgba(0,216,167,.18);
   flex: 0 0 auto;
+  flex-shrink: 0; 
 }
 
 
