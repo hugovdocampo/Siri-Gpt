@@ -9,26 +9,26 @@ import { seedFirstTurn } from './state/seeder.js';
 
 import * as dom from './ui/dom.js';
 import * as md from './markdown/markdown.js';
-
-// Precarga marked + DOMPurify antes del primer render
-await md.ensureMarkdownReady();
+import { typewrite } from './ui/typing.js';
 
 import { toast } from './ui/toast.js';
 import { initOrb } from './ui/orb.js';
-
 import { initSpeech } from './mic/speech.js';
 
 console.log('[Grooky] app.js cargado', new Date().toISOString());
 
 (async function main() {
+  // Precarga de marked + DOMPurify para que el primer render ya tenga Markdown
+  try { await md.ensureMarkdownReady(); } catch (e) { console.warn('Markdown preload', e); }
+
   // ---------- DOM refs ----------
-  const $title = /** @type {HTMLHeadingElement} */ (document.getElementById('title'));
+  const $title  = /** @type {HTMLHeadingElement} */ (document.getElementById('title'));
   const $canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('grookyCanvas'));
-  const $chat = /** @type {HTMLElement} */ (document.getElementById('chat'));
-  const $form = /** @type {HTMLFormElement} */ (document.getElementById('form'));
-  const $input = /** @type {HTMLTextAreaElement} */ (document.getElementById('input'));
-  const $send = /** @type {HTMLButtonElement} */ (document.getElementById('send'));
-  const $mic = /** @type {HTMLButtonElement} */ (document.getElementById('mic'));
+  const $chat   = /** @type {HTMLElement} */ (document.getElementById('chat'));
+  const $form   = /** @type {HTMLFormElement} */ (document.getElementById('form'));
+  const $input  = /** @type {HTMLTextAreaElement} */ (document.getElementById('input'));
+  const $send   = /** @type {HTMLButtonElement} */ (document.getElementById('send'));
+  const $mic    = /** @type {HTMLButtonElement} */ (document.getElementById('mic'));
 
   // ---------- Título ----------
   if (config.title) $title.textContent = config.title;
@@ -40,8 +40,10 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
   const history = createHistory(config.id);
   if (config.reset) history.clear(); // limpiar hilo si ?reset=1
   history.load();
+
   // Render inicial si hubiera algo previo
   dom.renderAll($chat, history.get(), { markdown: md.render });
+  dom.scrollToEnd($chat);
 
   // ---------- Micrófono ----------
   initSpeech({
@@ -53,8 +55,8 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
       const a = document.createElement('a');
       a.href = location.href; a.target = '_blank'; a.rel = 'noopener'; a.click();
     },
-    onStart() { $mic.classList.add('rec'); toast('Escuchando…'); },
-    onError() { $mic.classList.remove('rec'); toast('No se pudo usar el dictado'); },
+    onStart()  { $mic.classList.add('rec'); toast('Escuchando…'); },
+    onError()  { $mic.classList.remove('rec'); toast('No se pudo usar el dictado'); },
     onEnd(finalText) {
       $mic.classList.remove('rec');
       if (finalText && !$input.value.trim()) {
