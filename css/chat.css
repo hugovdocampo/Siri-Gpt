@@ -1,0 +1,269 @@
+/* ==========================================================================
+   Grooky — chat.css
+   Estilos del timeline, burbujas, markdown, caret de typing y responsivo.
+   Depende de variables/estilos base definidos en base.css
+   ========================================================================== */
+
+/* ---------- Timeline y mensajes ---------- */
+
+#chat {
+  /* el padding base viene de base.css; aquí solo afinamos separación vertical */
+}
+
+.msg {
+  /* ancho ya controlado en base.css (#chat + utilidades) */
+  margin: 0 auto var(--space-8) auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Separación entre mensajes del mismo autor ligeramente menor */
+.msg.user + .msg.user,
+.msg.assistant + .msg.assistant {
+  margin-top: var(--space-6);
+}
+
+/* ---------- Burbujas ---------- */
+
+.bubble {
+  display: grid;
+  grid-template-rows: auto 1fr auto; /* who / text / meta */
+  gap: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-12);
+  padding: var(--space-8) var(--space-12);
+  line-height: var(--lh-normal);
+  max-width: 100%;
+  box-shadow: var(--shadow-soft);
+}
+
+/* Usuario: ocupa siempre todo el ancho del hilo (tu petición) */
+.msg.user .bubble {
+  background: #0f1e27;
+  border-color: #193545;
+  width: 100%;
+}
+
+/* Grooky: ancho fluido a 100% del contenedor (para homogeneidad móvil) */
+.msg.assistant .bubble {
+  background: var(--surface-2);
+  border-color: var(--border);
+  width: 100%;
+}
+
+/* Quién habla */
+.bubble .who {
+  font-size: var(--fs-11);
+  color: var(--text-subtle);
+  margin: 0 0 var(--space-2) var(--space-2);
+  line-height: 1;
+}
+
+/* Texto del mensaje (markdown dentro) */
+.bubble .text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Meta (hora) alineada a la derecha y sin corte en móviles */
+.bubble .meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-11);
+  color: #8b93a3;
+  margin-top: var(--space-4);
+  padding-right: var(--space-2);
+  white-space: nowrap;
+}
+
+/* ---------- Caret de typing ---------- */
+
+.typing {
+  border-right: 1px solid #79c0ff;
+  animation: caretBlink 1s steps(1) infinite;
+  min-height: 1em; /* evita salto visual en líneas vacías */
+  white-space: pre-wrap;
+}
+
+@keyframes caretBlink {
+  50% { border-color: transparent; }
+}
+
+/* ---------- Markdown (solo dentro de .text) ---------- */
+
+.text p {
+  margin: .45em 0;
+}
+
+/* Listas */
+.text ul,
+.text ol {
+  margin: .45em 0 .45em 1.25em;
+  padding: 0;
+  list-style: initial;
+}
+
+.text ul { list-style-type: disc; }
+.text ol { list-style-type: decimal; }
+
+.text li + li { margin-top: .25em; }
+
+/* Enlaces */
+.text a {
+  color: var(--accent-teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.text a:hover {
+  opacity: .9;
+}
+
+/* Código inline y bloque */
+.text code,
+.text pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  background: #191922;
+  border: 1px solid #2a2a32;
+  border-radius: 6px;
+}
+
+.text code {
+  padding: .15em .35em;
+  white-space: break-spaces;
+}
+
+.text pre {
+  padding: .6em .8em;
+  overflow: auto;
+  line-height: 1.35;
+  margin: .6em 0;
+}
+
+/* Citas */
+.text blockquote {
+  border-left: 3px solid #2a2a32;
+  margin: .4em 0;
+  padding: .2em .8em;
+  color: #b8bfcd;
+}
+
+/* Tablas responsivas con desbordamiento horizontal suave */
+.text table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;          /* para permitir scroll en móvil sin romper layout */
+  overflow-x: auto;
+  margin: .6em 0;
+}
+
+.text th,
+.text td {
+  border: 1px solid #2a2a32;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.text thead th {
+  background: #181820;
+  position: sticky;
+  top: 0; /* se pega en scroll vertical dentro del bloque si es muy alto */
+  z-index: 1;
+}
+
+.text tr:nth-child(even) td {
+  background: #121219;
+}
+
+/* Imágenes en mensajes: ajustadas al ancho y con borde sutil */
+.text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-8);
+  border: 1px solid var(--border);
+  display: block;
+  margin: .5em 0;
+}
+
+/* Separadores horizontales (si el markdown trae ---) */
+.text hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: .8em 0;
+  opacity: .75;
+}
+
+/* ---------- Ajustes específicos móviles ---------- */
+
+@media (max-width: 640px) {
+  .bubble {
+    padding: 8px 10px;           /* aún más compacto */
+  }
+  .bubble .who {
+    margin-left: var(--space-2);
+  }
+  .bubble .meta {
+    font-size: var(--fs-10);
+    padding-right: 0;
+  }
+  .text table {
+    /* asegura scroll horizontal sin “bailes” */
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ---------- Estado de mic y botones en composer (coherencia) ---------- */
+
+.btn-mic,
+.btn-send {
+  background: #26262f;
+  border: 1px solid #353542;
+  color: var(--text);
+  transition: filter .15s ease;
+}
+
+.btn-mic:hover,
+.btn-send:hover {
+  filter: brightness(1.05);
+}
+
+.btn-mic.rec {
+  background: #5e2345;
+  border-color: #823157;
+}
+
+/* ---------- Utilidades locales del chat ---------- */
+
+/* Oculta mensajes vacíos que puedan colarse por errores de parseo */
+.msg:has(.text:empty) { display: none; }
+
+/* Evita micro-saltos cuando el skeleton de typing aparece */
+.msg.assistant .text.typing:empty::before {
+  content: " ";
+  visibility: hidden;
+}
+
+/* Cuando el mensaje contiene un bloque de código predominantemente grande,
+   reduce el margen inferior de la meta para compactar */
+.msg.assistant .text pre + .meta,
+.msg.assistant .text table + .meta {
+  margin-top: var(--space-6);
+}
+
+/* ---------- Compatibilidad con base.css ---------- */
+
+/* Hereda colores */
+.msg.user .bubble { background: #0f1e27; border-color: #193545; }
+.msg.assistant .bubble { background: var(--surface-2); border-color: var(--border); }
+
+/* Asegura que las listas markdown no afecten el layout global */
+.msg .text ul,
+.msg .text ol { padding-left: 1.25em; }
+
+/* Quita doble margen en párrafos consecutivos renderizados por marked */
+.msg .text p:first-child { margin-top: 0; }
+.msg .text p:last-child  { margin-bottom: 0; }
