@@ -1,0 +1,248 @@
+/* ==========================================================================
+   Grooky — theme.css
+   Capa de tematización: acentos, sombras, contrastes y micro-interacciones.
+   Depende de variables y layout definidos en base.css y chat.css.
+   ========================================================================== */
+
+/* --------------------------------- */
+/* Acentos y contrastes por defecto  */
+/* --------------------------------- */
+
+:root {
+  /* Realza los acentos por si el dispositivo tiene buen contraste */
+  --accent-yellow: #FFD54F;
+  --accent-teal:   #00D8A7;
+
+  /* Sombras y bordes un poco más marcados */
+  --shadow-soft: 0 10px 34px rgba(0,0,0,.42);
+  --border-strong: #2b2b35;
+}
+
+/* Tipografía de marca */
+#title {
+  letter-spacing: .25px;
+  font-weight: 700;
+  color: #e9e9f1;
+  text-shadow: 0 1px 0 rgba(0,0,0,.25);
+}
+
+/* --------------------------------- */
+/* Orbe: glow sutil y realce de capa */
+/* --------------------------------- */
+
+#grookyCanvas {
+  /* Glow por CSS además del trazo dibujado en canvas */
+  filter:
+    drop-shadow(0 0 10px rgba(255,213,79,.20))
+    drop-shadow(0 0 14px rgba(0,216,167,.18));
+  background: transparent; /* por si algún navegador añade fondo */
+}
+
+/* --------------------------------- */
+/* Header y composer con profundidad */
+/* --------------------------------- */
+
+.app-header {
+  background: linear-gradient(
+    to bottom,
+    rgba(11,11,13,.85),
+    rgba(11,11,13,.75)
+  );
+  backdrop-filter: saturate(130%) blur(8px);
+  -webkit-backdrop-filter: saturate(130%) blur(8px);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.composer {
+  background: linear-gradient(
+    to top,
+    rgba(11,11,13,.92),
+    rgba(11,11,13,.82)
+  );
+  border-top: 1px solid var(--border-strong);
+  backdrop-filter: saturate(130%) blur(8px);
+  -webkit-backdrop-filter: saturate(130%) blur(8px);
+}
+
+/* --------------------------------- */
+/* Botones (mic / enviar)            */
+/* --------------------------------- */
+
+.btn-mic,
+.btn-send {
+  color: #eef2f7;
+  background:
+    radial-gradient(120% 120% at 10% 10%, rgba(255,213,79,.06) 0%, transparent 60%),
+    radial-gradient(120% 120% at 90% 90%, rgba(0,216,167,.05) 0%, transparent 60%),
+    #26262f;
+  border-color: #3a3a48;
+  transition: transform .06s ease, filter .15s ease, border-color .15s ease;
+}
+
+.btn-mic:hover,
+.btn-send:hover {
+  filter: brightness(1.07);
+  border-color: #4a4a58;
+}
+
+.btn-mic:active,
+.btn-send:active {
+  transform: translateY(1px) scale(.99);
+  filter: brightness(1.03);
+}
+
+.btn-mic:disabled,
+.btn-send:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+/* Estado de grabación (definido también en chat.css), aquí reforzamos el color */
+.btn-mic.rec {
+  background:
+    radial-gradient(120% 120% at 10% 10%, rgba(255,213,79,.06) 0%, transparent 60%),
+    #5e2345;
+  border-color: #8b3a66;
+}
+
+/* --------------------------------- */
+/* Inputs                            */
+/* --------------------------------- */
+
+.composer-input {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+
+.composer-input:focus {
+  border-color: #3b3b50;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.04),
+    0 0 0 2px rgba(0,216,167,.18);
+}
+
+/* --------------------------------- */
+/* Enlaces dentro de mensajes        */
+/* --------------------------------- */
+
+.bubble .text a {
+  color: var(--accent-teal);
+  text-decoration-color: rgba(0,216,167,.8);
+  text-decoration-thickness: .09em;
+  text-underline-offset: 2px;
+}
+
+.bubble .text a:hover {
+  color: #48e0bf;
+  text-decoration-color: #48e0bf;
+}
+
+/* --------------------------------- */
+/* Selección de texto                */
+/* --------------------------------- */
+
+::selection {
+  background: rgba(0,216,167,.35);
+  color: #0b0b0d;
+}
+
+/* --------------------------------- */
+/* Toasts por tipo                   */
+/* --------------------------------- */
+
+.toast {
+  border: 1px solid #2a2a38;
+  background:
+    radial-gradient(140% 140% at 0% 0%, rgba(255,213,79,.05) 0%, transparent 40%),
+    #1a1a1f;
+  color: #e9e9f1;
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+
+.toast-ok {
+  border-color: rgba(0,216,167,.45);
+  box-shadow: 0 8px 24px rgba(0,216,167,.25);
+}
+
+.toast-warn {
+  border-color: rgba(255,213,79,.45);
+  box-shadow: 0 8px 24px rgba(255,213,79,.22);
+}
+
+.toast-error {
+  border-color: rgba(255,92,92,.55);
+  box-shadow: 0 8px 24px rgba(255,92,92,.22);
+}
+
+/* --------------------------------- */
+/* Burbujas y markdown (detalles)    */
+/* --------------------------------- */
+
+/* Reforzar contraste de cabecera de tabla */
+.bubble .text thead th {
+  background:
+    linear-gradient(to bottom, rgba(24,24,32,.95), rgba(24,24,32,.85));
+  border-bottom-color: #34343f;
+}
+
+/* Rayado suave en filas pares ya definido; reforzamos división */
+.bubble .text tr + tr td {
+  border-top-color: #2f2f39;
+}
+
+/* Código inline un pelín más luminoso */
+.bubble .text code {
+  background: #1e1e27;
+  border-color: #2e2e3a;
+}
+
+/* Bloques de código con glow sutil */
+.bubble .text pre {
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(255,213,79,.06) 0%, transparent 55%),
+    #191922;
+  border-color: #2a2a32;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+}
+
+/* Citas con color ligeramente más cálido */
+.bubble .text blockquote {
+  border-left-color: #2f2f3a;
+  color: #bec6d6;
+}
+
+/* --------------------------------- */
+/* Estados y media queries           */
+/* --------------------------------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-mic:hover svg,
+  .btn-send:hover { filter: brightness(1.08); }
+}
+
+/* Reduce motion → elimina brillos extra que impliquen animación perceptible */
+@media (prefers-reduced-motion: reduce) {
+  .app-header,
+  .composer {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* --------------------------------- */
+/* Mínimos ajustes responsivos       */
+/* --------------------------------- */
+
+@media (max-width: 640px) {
+  #title {
+    font-size: 15px;
+  }
+  .brand {
+    gap: 8px;
+  }
+  #grookyCanvas {
+    filter:
+      drop-shadow(0 0 8px rgba(255,213,79,.18))
+      drop-shadow(0 0 10px rgba(0,216,167,.15));
+  }
+}
