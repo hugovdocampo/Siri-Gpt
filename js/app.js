@@ -36,6 +36,75 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
   // ---------- Orb (canvas) ----------
   try { initOrb($canvas); } catch { /* no-op si algo falla */ }
 
+  // ========== **PRO**: medir altura del composer y detectar teclado ==========
+  // - Ajusta padding inferior del chat según:
+  //   a) Altura real del composer (form)
+  //   b) Altura estimada del teclado virtual (visualViewport en iOS/Safari)
+  // - Expone CSS vars: --composer-h, --kb-h, --vh
+  const setVar = (k, v) => document.documentElement.style.setProperty(k, v);
+
+  function measureComposerHeight() {
+    if (!$form) return 0;
+    const r = $form.getBoundingClientRect();
+    const h = Math.max(0, Math.round(r.height));
+    setVar('--composer-h', h + 'px');
+    return h;
+  }
+
+  // visualViewport: calcula “keyboard height” aproximado
+  function computeKeyboardHeight() {
+    const vv = window.visualViewport;
+    if (!vv) return 0;
+    // Cuando aparece el teclado, suele reducir vv.height
+    // y vv.offsetTop puede no ser 0 en iOS.
+    const occupied = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+    return Math.round(occupied);
+  }
+
+  function updateVH() {
+    // 1% del viewport real (útil si tu CSS usa var(--vh))
+    const unit = (window.visualViewport ? window.visualViewport.height : window.innerHeight) / 100;
+    setVar('--vh', unit + 'px');
+  }
+
+  // Ajusta el padding del contenedor de chat
+  function applyChatInsets({ scroll = false } = {}) {
+    const ch = measureComposerHeight();
+    const kb = computeKeyboardHeight();
+    setVar('--kb-h', kb + 'px');
+
+    // Nota: normalmente con el CSS que ya cambiaste bastaría con las vars.
+    // Para asegurar compatibilidad, ajusto también el paddingBottom directo:
+    const extraGap = 8; // pequeño margen
+    $chat.style.paddingBottom = (ch + extraGap) + 'px';
+
+    if (scroll) dom.scrollToEnd($chat);
+  }
+
+  // Observadores:
+  // 1) visualViewport (apertura/cierre de teclado, barra de URL en iOS, etc.)
+  const onVVChange = () => {
+    updateVH();
+    // Cuando el teclado se abre/cierra, reacomodamos y opcionalmente scroll
+    applyChatInsets({ scroll: true });
+  };
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onVVChange);
+    window.visualViewport.addEventListener('scroll', onVVChange); // iOS cambia offsetTop
+  } else {
+    // Fallback si no existe visualViewport
+    window.addEventListener('resize', () => applyChatInsets({ scroll: true }));
+  }
+
+  // 2) Resize del composer (textarea auto-crece, botones, etc.)
+  const ro = new ResizeObserver(() => applyChatInsets({ scroll: false }));
+  try { ro.observe($form); } catch { /* no-op */ }
+  try { ro.observe($input); } catch { /* no-op */ }
+
+  // Inicializa variables y padding
+  updateVH();
+  applyChatInsets({ scroll: false });
+
   // ---------- Historial ----------
   const history = createHistory(config.id);
   if (config.reset) history.clear(); // limpiar hilo si ?reset=1
@@ -62,6 +131,8 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
       if (finalText && !$input.value.trim()) {
         $input.value = finalText;
         autoResize($input);
+        // Al crecer el textarea, re‑mide composer y baja el scroll
+        applyChatInsets({ scroll: true });
       }
       // Si quieres auto-enviar tras dictar, descomenta:
       // if ($input.value.trim()) $form.requestSubmit();
@@ -84,7 +155,11 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
   }
 
   // ---------- Auto-resize del textarea ----------
-  $input.addEventListener('input', () => autoResize($input));
+  $input.addEventListener('input', () => {
+    autoResize($input);
+    // El composer cambia de altura → re‑mide y corrige padding
+    applyChatInsets({ scroll: false });
+  });
   autoResize($input);
 
   // ---------- Envío de nuevos mensajes ----------
@@ -96,6 +171,7 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
     // Vaciar input
     $input.value = '';
     autoResize($input);
+    applyChatInsets({ scroll: false });
 
     // Añadir usuario al historial + pintar
     const tsUser = Date.now();
@@ -135,6 +211,8 @@ console.log('[Grooky] app.js cargado', new Date().toISOString());
       console.error('postChat error', err);
     } finally {
       disableComposer(false);
+      // Tras cualquier envío, asegura que el padding está bien
+      applyChatInsets({ scroll: false });
     }
   });
 
