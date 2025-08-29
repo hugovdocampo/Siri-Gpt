@@ -1,77 +1,65 @@
-// --- helper: lee el cuerpo crudo pase lo que pase ---
+// Acepta:
+//  - { message: "..." }  (turno único)
+//  - { messages: [{role:"system"|"user"|"assistant", content:"..."}], model?, temperature? }  (chat)
+
 function getRawBody(req) {
   return new Promise((resolve, reject) => {
-    try {
-      let data = "";
-      req.on("data", chunk => { data += chunk; });
-      req.on("end", () => resolve(data));
-      req.on("error", reject);
-    } catch (e) { reject(e); }
+    let data = "";
+    req.on("data", chunk => { data += chunk; });
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
   });
 }
 
 module.exports = async function handler(req, res) {
-  // Cabeceras para que el Atajo NUNCA reciba HTML
+  // Cabeceras para JSON y CORS
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-
   if (req.method === "OPTIONS") return res.status(204).end();
 
   try {
-    // GET de salud (abre esta URL en el navegador para comprobar ruta y env)
     if (req.method === "GET") {
-      return res.status(200).json({
-        ok: true,
-        envOk: Boolean(process.env.GROQ_API_KEY),
-        now: new Date().toISOString()
-      });
+      return res.status(200).json({ ok: true, now: new Date().toISOString() });
     }
-
     if (req.method !== "POST") {
       res.setHeader("Allow", "GET, POST, OPTIONS");
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    // --- PARSEO ROBUSTO DEL BODY ---
-    // 1) intenta leer cuerpo crudo (sirve para text/plain o form-data)
-    const rawBody = await getRawBody(req);
+    const raw = await getRawBody(req);
     const ct = (req.headers["content-type"] || "").toLowerCase();
-    let bodyObj = {};
-
-    if (rawBody && rawBody.length) {
-      if (ct.includes("application/json")) {
-        try {
-          bodyObj = JSON.parse(rawBody);
-        } catch (e) {
-          return res.status(400).json({ error: "JSON inválido", raw: rawBody.slice(0, 200) });
-        }
-      } else if (ct.includes("application/x-www-form-urlencoded")) {
-        const params = new URLSearchParams(rawBody);
-        bodyObj = Object.fromEntries(params);
-      } else {
-        // text/plain u otro: interpreta TODO el body como el mensaje
-        bodyObj = { message: rawBody };
-      }
-    } else if (req.body) {
-      // fallback por si Vercel ya parseó
-      bodyObj = typeof req.body === "string" ? { message: req.body } : req.body;
-    }
-
-    const { message } = bodyObj || {};
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({
-        error: "Falta 'message' (string) en el body",
-        tip: "Manda JSON: {\"message\":\"...\"} o text/plain con el texto directamente",
-        received: bodyObj
-      });
+    let body = {};
+    if (ct.includes("application/json")) {
+      try { body = JSON.parse(raw || "{}"); }
+      catch { return res.status(400).json({ error: "JSON inválido", raw: raw?.slice(0,200) }); }
+    } else if (ct.includes("application/x-www-form-urlencoded")) {
+      const params = new URLSearchParams(raw);
+      body = Object.fromEntries(params);
+    } else {
+      // text/plain u otros: interpretar como message directo
+      body = { message: raw };
     }
 
     const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "Falta GROQ_API_KEY en variables de entorno" });
+    if (!apiKey) return res.status(500).json({ error: "Falta GROQ_API_KEY" });
+
+    // Soporte de ambos modos
+    let messages = body.messages;
+    const single = body.message;
+    const model = body.model || "llama-3.3-70b-versatile"; // puedes cambiar a 8b si quieres más cupo
+    const temperature = typeof body.temperature === "number" ? body.temperature : 0.4;
+
+    if (!messages && !single) {
+      return res.status(400).json({ error: "Falta 'message' o 'messages[]' en el body" });
+    }
+    if (!messages && single) {
+      messages = [
+        { role: "system", content: "Eres un asistente útil y conciso." },
+        { role: "user", content: String(single) }
+      ];
     }
 
     const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -82,36 +70,33 @@ module.exports = async function handler(req, res) {
         "Accept": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", // o "llama-3.1-8b-instant" para más rapidez
-        messages: [
-          { role: "system", content: "Eres un asistente útil y conciso." },
-          { role: "user", content: message }
-        ],
-        temperature: 0.4
+        model,
+        messages,
+        temperature,
+        stream: false // más adelante podemos habilitar streaming SSE
       })
     });
 
-    // Lee crudo para poder reportar errores no‑JSON
-    const groqRaw = await groqResp.text();
+    const groqText = await groqResp.text();
     let data;
-    try {
-      data = JSON.parse(groqRaw);
-    } catch {
-      return res.status(groqResp.status || 502).json({
-        error: "Respuesta no JSON desde Groq",
-        details: groqRaw.slice(0, 2000)
-      });
+    try { data = JSON.parse(groqText); }
+    catch {
+      return res.status(groqResp.status || 502).json({ error: "Respuesta no JSON desde Groq", details: groqText.slice(0, 2000) });
     }
 
     if (!groqResp.ok) {
       return res.status(groqResp.status).json({ error: "Groq API error", details: data });
     }
 
-    const outputText = data?.choices?.[0]?.message?.content?.trim() || "Sin respuesta";
-    return res.status(200).json({ response: outputText });
+    const reply = data?.choices?.[0]?.message?.content?.trim() || "";
+    return res.status(200).json({
+      response: reply,
+      model: data?.model,
+      usage: data?.usage || null
+    });
 
   } catch (err) {
-    console.error("❌ Handler error:", err);
+    console.error("❌ siri-gpt error:", err);
     return res.status(500).json({ error: String(err) });
   }
 };
