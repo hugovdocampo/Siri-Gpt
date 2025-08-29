@@ -11,71 +11,48 @@
   body{
     margin:0; background:#0b0b0d; color:#e8e8ea;
     font-family:-apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    display:flex; align-items:center; justify-content:center;
-    padding:24px;
+    display:flex; align-items:center; justify-content:center; padding:24px;
   }
   .wrap{
     width:min(900px, 96vw);
-    display:grid;
-    grid-template-columns: 140px 1fr;
-    gap:22px;
-    align-items:center;
+    display:grid; grid-template-columns: 140px 1fr; gap:22px; align-items:center;
   }
-  /* Orbe animado estilo Siri mejorado */
+  /* Orbe animado */
   .orb{
     position:relative; width:140px; height:140px; border-radius:50%;
     background:
       radial-gradient(60% 60% at 50% 50%, rgba(125,0,255,.65) 0%, transparent 60%),
       radial-gradient(60% 60% at 70% 30%, rgba(0,200,255,.65) 0%, transparent 60%),
       radial-gradient(60% 60% at 30% 70%, rgba(255,40,140,.55) 0%, transparent 60%);
-    box-shadow:
-      0 0 40px rgba(125,0,255,.35),
-      0 0 60px rgba(0,200,255,.25),
-      inset 0 0 26px rgba(255,255,255,.08);
-    animation: float 3.2s ease-in-out infinite;
-    overflow:visible;
+    box-shadow: 0 0 40px rgba(125,0,255,.35), 0 0 60px rgba(0,200,255,.25), inset 0 0 26px rgba(255,255,255,.08);
+    animation: float 3.2s ease-in-out infinite; overflow:visible;
   }
   .orb::before,.orb::after{
     content:""; position:absolute; inset:-18%; border-radius:inherit;
     background: conic-gradient(from 0deg, #8a2be2, #00e0ff, #ff2bb6, #8a2be2);
     filter: blur(34px); opacity:.55; animation: spin 14s linear infinite;
   }
-  .orb::after{
-    inset:-34%; filter: blur(60px); opacity:.32; animation-duration:28s;
-  }
+  .orb::after{ inset:-34%; filter: blur(60px); opacity:.32; animation-duration:28s; }
   @keyframes spin { to { transform: rotate(360deg);} }
   @keyframes float { 0%,100% { transform:translateY(-3px);} 50%{ transform:translateY(3px);} }
-
   .bubble{
-    background: #121217;
-    border: 1px solid #23232a;
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 8px 28px rgba(0,0,0,.35);
-    min-height: 84px;
+    background: #121217; border: 1px solid #23232a; border-radius: 16px;
+    padding: 18px 20px; box-shadow: 0 8px 28px rgba(0,0,0,.35); min-height: 84px;
   }
-  .title{
-    font-weight:600; color:#bdbdc7; letter-spacing:.2px; margin-bottom:8px; font-size:13px;
-    text-transform: uppercase;
-  }
-  .out{
-    font-size:18px; line-height:1.5; white-space:pre-wrap; word-break:break-word;
-    font-variant-ligatures: none;
-  }
-  /* Cursor tipo "máquina de escribir" */
-  .out::after{
-    content:"▎"; display:inline-block; margin-left:2px; color:#79c0ff;
-    animation: blink 1s steps(1) infinite;
-  }
+  .title{ font-weight:600; color:#bdbdc7; letter-spacing:.2px; margin-bottom:8px; font-size:13px; text-transform: uppercase; }
+  .out{ font-size:18px; line-height:1.5; white-space:pre-wrap; word-break:break-word; font-variant-ligatures: none; }
+  .out::after{ content:"▎"; display:inline-block; margin-left:2px; color:#79c0ff; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
-
-  @media (prefers-reduced-motion: reduce){
-    .orb, .orb::before, .orb::after { animation:none }
-    .out::after { animation:none }
+  @media (prefers-reduced-motion: reduce){ .orb, .orb::before, .orb::after, .out::after { animation:none } }
+  /* Botón de cierre por si falla el auto-cierre */
+  .close{
+    position:fixed; right:14px; top:12px; background:#1a1a1f; color:#cfcfd8;
+    border:1px solid #2a2a32; border-radius:12px; padding:8px 12px; font-size:14px;
   }
 </style>
 </head>
 <body>
+  <button class="close" onclick="backToShortcuts()">Cerrar</button>
   <div class="wrap">
     <div class="orb" aria-hidden="true"></div>
     <div class="bubble">
@@ -85,32 +62,81 @@
   </div>
 
 <script>
-(() => {
+(function(){
   const qs = new URLSearchParams(location.search);
-  // Texto en ?text=... o ?q=...
   const raw = qs.get("text") || qs.get("q") || "";
   const source = decodeURIComponent(raw);
 
-  // Ajustes de la "máquina de escribir": ?speed=18&chunk=2
-  const speed = Math.max(1, parseInt(qs.get("speed") || "18", 10));  // ms por tick
-  const chunk = Math.max(1, parseInt(qs.get("chunk") || "2", 10));   // nº de caracteres por tick
+  // Typewriter params (defaults: speed=18ms, chunk=2)
+  const speed = Math.max(1, parseInt(qs.get("speed") || "18", 10));
+  const chunk = Math.max(1, parseInt(qs.get("chunk") || "2", 10));
+
+  // Speech params
+  const wantSpeak = (qs.get("speak") ?? "1") !== "0"; // speak=0 para desactivar
+  const lang = qs.get("v") || qs.get("voice") || "es-ES"; // idioma/voz objetivo
+  const rate = Math.min(2, Math.max(0.5, parseFloat(qs.get("rate") || "1")));
+  const pitch = Math.min(2, Math.max(0, parseFloat(qs.get("pitch") || "1")));
+  const volume = Math.min(1, Math.max(0, parseFloat(qs.get("volume") || "1")));
+  const doClose = (qs.get("close") || qs.get("back")) === "1"; // close=1 -> volver a Shortcuts
 
   const out = document.getElementById("out");
   out.textContent = "";
 
-  let i = 0;
+  // --- Typewriter ---
+  let i = 0, typeDone = false;
   function type() {
-    if (i >= source.length) return;
+    if (i >= source.length) { typeDone = true; maybeClose(); return; }
     out.textContent += source.slice(i, i + chunk);
     i += chunk;
     setTimeout(type, speed);
   }
-  if (!source.trim()) {
+
+  // --- Speech Synthesis ---
+  let speakDone = !wantSpeak;
+  function speak() {
+    if (!wantSpeak || !("speechSynthesis" in window)) { speakDone = true; maybeClose(); return; }
+    const utter = new SpeechSynthesisUtterance(source);
+    utter.lang = lang; utter.rate = rate; utter.pitch = pitch; utter.volume = volume;
+
+    // Intentar seleccionar una voz del idioma deseado
+    const setVoice = () => {
+      const voices = speechSynthesis.getVoices();
+      const match = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+      if (match) utter.voice = match;
+      speechSynthesis.cancel(); // limpia colas previas
+      speechSynthesis.speak(utter);
+    };
+    if (speechSynthesis.getVoices().length) setVoice();
+    else speechSynthesis.onvoiceschanged = setVoice;
+
+    utter.onend = () => { speakDone = true; maybeClose(); };
+    utter.onerror = () => { speakDone = true; maybeClose(); };
+  }
+
+  // --- Cierre cuando ambos terminan ---
+  function maybeClose(){
+    if (typeDone && speakDone && doClose) backToShortcuts();
+  }
+
+  // Fallback: si algo se cuelga, cierra en un máximo estimado
+  const estimateMs = Math.ceil((source.length / chunk) * speed) + 2500;
+  setTimeout(() => { if (doClose) backToShortcuts(); }, Math.min(30000, Math.max(3500, estimateMs)));
+
+  // Inicio
+  if (!source.trim()){
     const dots = ["·","··","···",""];
-    let d = 0;
-    setInterval(() => { out.textContent = "Pensando"+dots[d++%dots.length]; }, 350);
+    let d = 0; setInterval(() => { out.textContent = "Pensando" + dots[d++ % dots.length]; }, 350);
   } else {
     type();
+  }
+  speak();
+
+  // Expuesto en ventana para el botón
+  window.backToShortcuts = backToShortcuts;
+
+  function backToShortcuts(){
+    // regresa a Shortcuts; esto cierra la hoja de “Mostrar vista web”
+    location.href = "shortcuts://";
   }
 })();
 </script>
